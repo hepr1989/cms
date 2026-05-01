@@ -1,0 +1,74 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+.wmde-markdown .attachment-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-primary);
+  text-decoration: underline;
+  font-weight: 500;
+  padding: 2px 0;
+  border-radius: 2px;
+}
+.wmde-markdown .attachment-link:hover {
+  color: var(--color-primary-hover);
+}
+.wmde-markdown .attachment-link svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+/* MDEditor 预览区表格样式（与 portal .markdown-body 保持一致） */
+.wmde-markdown table {
+  border-collapse: collapse !important;
+  width: 100%;
+  margin-bottom: 1em;
+  table-layout: auto;
+  display: block;
+  overflow-x: auto;
+}
+.wmde-markdown table th,
+.wmde-markdown table td {
+  border: 1px solid var(--color-border-strong) !important;
+  padding: 10px 14px !important;
+  word-break: break-word;
+  vertical-align: top;
+  line-height: 1.6;
+}
+.wmde-markdown table th {
+  background: var(--color-bg-hover) !important;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wmde-markdown table tr {
+  border-top: none !important;
+  background-color: transparent !important;
+}
+.wmde-markdown table tr:nth-child(2n) {
+  background-color: transparent !important;
+}
+.wmde-markdown table tr:hover {
+  background: var(--color-bg-hover) !important;
+}

@@ -1,0 +1,52 @@
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+
+# Maven wrapper
+.mvn/
+mvnw.cmd
+
+# Node.js / Frontend
+node_modules/
+dist/
+build/
+*.local
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.settings/
+.project
+.classpath
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Uploads & runtime
+#uploads/
+
+# Logs
+logs/
+*.log
+
+# Qoder
+.qoder/
+
+# Lombok config (user-specific)
+# lombok.config

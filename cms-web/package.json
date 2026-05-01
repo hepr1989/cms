@@ -1,0 +1,40 @@
+{
+  "name": "cms-web",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.3",
+    "@uiw/react-md-editor": "^4.0",
+    "antd": "^5.16",
+    "axios": "^1.7",
+    "immer": "^11.1.4",
+    "react": "^18.3",
+    "react-dom": "^18.3",
+    "react-markdown": "^9.0",
+    "react-router-dom": "^6.23",
+    "rehype-highlight": "^7.0",
+    "remark-gfm": "^4.0",
+    "zustand": "^4.5"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.4",
+    "@testing-library/react": "^16.0",
+    "@testing-library/user-event": "^14.5",
+    "@types/react": "^18.3",
+    "@types/react-dom": "^18.3",
+    "@vitejs/plugin-react": "^4.3",
+    "eslint": "^8.57",
+    "jsdom": "^24.0",
+    "playwright": "^1.59.1",
+    "typescript": "^5.4",
+    "vite": "^5.2",
+    "vitest": "^1.6"
+  }
+}

@@ -50,3 +50,6 @@ logs/
 
 # Lombok config (user-specific)
 # lombok.config
+
+
+compile_output.txt

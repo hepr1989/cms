@@ -57,10 +57,12 @@ export default function HeaderBar() {
         )}
       </div>
       <div className="header-right">
-        <Button type="text" icon={isAdmin ? <HomeOutlined /> : <SettingOutlined />}
-          onClick={() => navigate(isAdmin ? '/portal' : '/admin')}>
-          {isAdmin ? '前台' : '管理'}
-        </Button>
+        {isAdmin && (
+          <Button type="text" icon={<HomeOutlined />}
+            onClick={() => navigate('/portal')}>
+            前台
+          </Button>
+        )}
       </div>
     </div>
   );

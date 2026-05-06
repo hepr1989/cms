@@ -299,6 +299,7 @@
 .article-read-content {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
 }
 
 .article-read-page .article-read-header {

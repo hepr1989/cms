@@ -1,6 +1,6 @@
 import React from 'react';
 import { FolderOutlined, FileTextOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
-import { Button } from 'antd';
+import { Button, Modal, message } from 'antd';
 import type { TreeDataNode } from '@/types';
 import { useUIStore } from '@/store/ui-store';
 import { useTreeStore } from '@/store/tree-store';
@@ -18,12 +18,24 @@ const TreeNodeTitle = React.memo(function TreeNodeTitle({ node, mode }: Props) {
   const removeNode = useTreeStore(s => s.removeNode);
 
   const handleDelete = async () => {
-    if (node.type === 'folder') {
-      await deleteFolder(node.code);
-    } else {
-      await deleteArticle(node.code);
-    }
-    removeNode(node.key);
+    const typeName = node.type === 'folder' ? '栏目' : '文章';
+    Modal.confirm({
+      title: `确认删除${typeName}`,
+      content: '删除后不可恢复',
+      onOk: async () => {
+        try {
+          if (node.type === 'folder') {
+            await deleteFolder(node.code);
+          } else {
+            await deleteArticle(node.code);
+          }
+          removeNode(node.key);
+          message.success('已删除');
+        } catch (e: any) {
+          message.error(e?.response?.data?.message || e?.message || '删除失败');
+        }
+      },
+    });
   };
 
   const statusColor = node.type === 'article'

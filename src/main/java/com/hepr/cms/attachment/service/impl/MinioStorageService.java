@@ -27,9 +27,7 @@ public class MinioStorageService implements StorageService {
     @Override
     public String store(MultipartFile file, String storageKey) {
         try {
-            if (!minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
-                minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
-            }
+            ensureBucket();
             minioClient.putObject(
                     PutObjectArgs.builder()
                             .bucket(bucket)
@@ -40,6 +38,29 @@ public class MinioStorageService implements StorageService {
             return storageKey;
         } catch (Exception e) {
             throw new BusinessException(500, "MinIO文件存储失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    public String store(InputStream inputStream, long size, String contentType, String storageKey) {
+        try {
+            ensureBucket();
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(bucket)
+                            .object(storageKey)
+                            .stream(inputStream, size, -1)
+                            .contentType(contentType)
+                            .build());
+            return storageKey;
+        } catch (Exception e) {
+            throw new BusinessException(500, "MinIO文件存储失败：" + e.getMessage());
+        }
+    }
+
+    private void ensureBucket() throws Exception {
+        if (!minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
+            minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
         }
     }
 

@@ -5,6 +5,7 @@ import com.hepr.cms.article.dto.ArticleSortDTO;
 import com.hepr.cms.article.dto.ArticleUpdateDTO;
 import com.hepr.cms.article.vo.ArticleVO;
 import com.hepr.cms.search.vo.SearchResultVO;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import java.util.Map;
 public interface ArticleService {
     ArticleVO getDetail(String articleCode);
     ArticleVO create(ArticleCreateDTO dto);
+    ArticleVO importPdf(MultipartFile file, String folderCode);
     ArticleVO update(ArticleUpdateDTO dto);
     void publish(String articleCode);
     void offline(String articleCode);

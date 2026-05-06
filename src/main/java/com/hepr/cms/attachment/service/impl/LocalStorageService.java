@@ -12,9 +12,11 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.annotation.PostConstruct;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 
 @Service
 @ConditionalOnProperty(name = "cms.storage.type", havingValue = "local", matchIfMissing = true)
@@ -36,6 +38,18 @@ public class LocalStorageService implements StorageService {
             Path targetPath = basePathDir.resolve(storageKey);
             Files.createDirectories(targetPath.getParent());
             Files.copy(file.getInputStream(), targetPath);
+            return storageKey;
+        } catch (IOException e) {
+            throw new BusinessException(500, "文件存储失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    public String store(InputStream inputStream, long size, String contentType, String storageKey) {
+        try {
+            Path targetPath = basePathDir.resolve(storageKey);
+            Files.createDirectories(targetPath.getParent());
+            Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
             return storageKey;
         } catch (IOException e) {
             throw new BusinessException(500, "文件存储失败：" + e.getMessage());

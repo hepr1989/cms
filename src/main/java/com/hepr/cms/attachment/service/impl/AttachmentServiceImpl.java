@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
@@ -54,6 +55,41 @@ public class AttachmentServiceImpl implements AttachmentService {
         attachment.setFileName(originalFilename);
         attachment.setFileUrl(storageService.getUrl(storageKey));
         attachment.setFileSize(file.getSize());
+        attachment.setStorageType(storageService.getStorageType());
+        attachment.setStorageKey(storageKey);
+        attachmentMapper.insert(attachment);
+
+        if (StringUtils.hasText(refType) && StringUtils.hasText(refCode)) {
+            AttachmentRef ref = new AttachmentRef();
+            ref.setRefCode(refCode);
+            ref.setRefType(refType);
+            ref.setAttachmentCode(attachment.getAttachmentCode());
+            attachmentRefMapper.insert(ref);
+        }
+
+        return populateDownloadUrl(BeanCopyUtil.copyProperties(attachment, AttachmentVO.class));
+    }
+
+    @Override
+    @Transactional
+    public AttachmentVO uploadFromBytes(byte[] data, String fileName, String contentType, String refType, String refCode) {
+        if (data.length > 10 * 1024 * 1024) {
+            throw new BusinessException(413, "文件大小不能超过10MB");
+        }
+
+        String ext = fileName != null && fileName.contains(".")
+                ? fileName.substring(fileName.lastIndexOf("."))
+                : "";
+
+        String yyyyMM = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        String storageKey = yyyyMM + "/" + UUID.randomUUID() + ext;
+        storageService.store(new ByteArrayInputStream(data), data.length, contentType, storageKey);
+
+        Attachment attachment = new Attachment();
+        attachment.setAttachmentCode(IdWorker.getIdStr());
+        attachment.setFileName(fileName);
+        attachment.setFileUrl(storageService.getUrl(storageKey));
+        attachment.setFileSize((long) data.length);
         attachment.setStorageType(storageService.getStorageType());
         attachment.setStorageKey(storageKey);
         attachmentMapper.insert(attachment);

@@ -41,6 +41,7 @@ export default function ArticleEditPage() {
   const reset = useArticleStore(s => s.reset);
   const treeData = useTreeStore(s => s.treeData);
   const syncSelection = useTreeStore(s => s.syncSelection);
+  const removeNode = useTreeStore(s => s.removeNode);
 
   // 是否为最外层目录下的内容（父级是根目录则不显示返回按钮）
   const isTopLevel = useMemo(() => {
@@ -117,6 +118,7 @@ export default function ArticleEditPage() {
     if (!articleCode) return;
     Modal.confirm({ title: '确认删除', content: '删除后不可恢复', onOk: async () => {
       await deleteArticle(articleCode);
+      removeNode(`article-${articleCode}`);
       message.success('已删除');
       navigate(-1);
     }});

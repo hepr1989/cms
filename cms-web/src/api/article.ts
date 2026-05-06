@@ -14,3 +14,20 @@ export const offlineArticle = (articleCode: string) => client.put(`/articles/${a
 export const deleteArticle = (articleCode: string) => client.delete(`/articles/${articleCode}`);
 
 export const updateArticleSort = (data: ArticleSortDTO) => client.put('/articles/sort', data);
+
+export const importPdf = (
+  file: File,
+  folderCode: string,
+  onProgress?: (percent: number) => void,
+) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('folderCode', folderCode);
+  return client.post<ArticleVO>('/articles/import-pdf', formData, {
+    onUploadProgress: onProgress
+      ? (e) => {
+          if (e.total) onProgress(Math.round((e.loaded * 100) / e.total));
+        }
+      : undefined,
+  });
+};

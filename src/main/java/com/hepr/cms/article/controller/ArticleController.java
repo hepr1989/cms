@@ -9,6 +9,7 @@ import com.hepr.cms.common.model.Result;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/articles")
@@ -25,6 +26,13 @@ public class ArticleController {
     @PostMapping
     public Result<ArticleVO> create(@Validated @RequestBody ArticleCreateDTO dto) {
         return Result.ok(articleService.create(dto));
+    }
+
+    @PostMapping("/import-pdf")
+    public Result<ArticleVO> importPdf(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("folderCode") String folderCode) {
+        return Result.ok(articleService.importPdf(file, folderCode));
     }
 
     @PutMapping

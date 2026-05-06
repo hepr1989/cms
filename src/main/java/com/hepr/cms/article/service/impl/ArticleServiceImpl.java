@@ -10,6 +10,8 @@ import com.hepr.cms.article.entity.Article;
 import com.hepr.cms.article.enums.ArticleStatus;
 import com.hepr.cms.article.mapper.ArticleMapper;
 import com.hepr.cms.article.service.ArticleService;
+import com.hepr.cms.article.service.pdfimport.PdfImportResult;
+import com.hepr.cms.article.service.pdfimport.PdfImportService;
 import com.hepr.cms.article.vo.ArticleVO;
 import com.hepr.cms.attachment.entity.AttachmentRef;
 import com.hepr.cms.attachment.mapper.AttachmentRefMapper;
@@ -22,6 +24,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -36,6 +39,7 @@ public class ArticleServiceImpl implements ArticleService {
 
     private final ArticleMapper articleMapper;
     private final AttachmentRefMapper attachmentRefMapper;
+    private final PdfImportService pdfImportService;
     @Lazy
     private final FolderService folderService;
 
@@ -74,6 +78,50 @@ public class ArticleServiceImpl implements ArticleService {
         article.setPublishedAt(null);
 
         articleMapper.insert(article);
+        return BeanCopyUtil.copyProperties(article, ArticleVO.class);
+    }
+
+    @Override
+    @Transactional
+    public ArticleVO importPdf(MultipartFile file, String folderCode) {
+        if (!folderService.existsAndActive(folderCode)) {
+            throw new BusinessException(400, "所属目录不存在或已不可用");
+        }
+
+        // 校验文件为 PDF
+        String contentType = file.getContentType();
+        String originalFilename = file.getOriginalFilename();
+        if ((contentType == null || !contentType.contains("pdf"))
+                && (originalFilename == null || !originalFilename.toLowerCase().endsWith(".pdf"))) {
+            throw new BusinessException(400, "仅支持导入 PDF 文件");
+        }
+
+        // 先创建空文章以获得 articleCode
+        Article article = new Article();
+        article.setArticleCode(IdWorker.getIdStr());
+        article.setTitle("导入中...");
+        article.setContentMd("");
+        article.setFolderCode(folderCode);
+
+        Article maxSortArticle = articleMapper.selectOne(
+                new LambdaQueryWrapper<Article>()
+                        .eq(Article::getFolderCode, folderCode)
+                        .orderByDesc(Article::getSort)
+                        .last("LIMIT 1"));
+        article.setSort(maxSortArticle != null ? maxSortArticle.getSort() + 1 : 0);
+        article.setStatus(ArticleStatus.DRAFT.name());
+        article.setPublishedAt(null);
+
+        articleMapper.insert(article);
+
+        // 解析 PDF 转换为 Markdown
+        PdfImportResult importResult = pdfImportService.convertToMarkdown(file, article.getArticleCode());
+
+        // 更新文章内容
+        article.setTitle(importResult.getTitle());
+        article.setContentMd(importResult.getMarkdown());
+        articleMapper.updateById(article);
+
         return BeanCopyUtil.copyProperties(article, ArticleVO.class);
     }
 

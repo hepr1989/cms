@@ -1,5 +1,5 @@
 import client from './client';
-import type { FolderVO, FolderTreeVO, FolderCreateDTO, FolderUpdateDTO, FolderSortDTO } from '@/types';
+import type { FolderVO, FolderTreeVO, FolderCreateDTO, FolderUpdateDTO, FolderSortDTO, FolderMoveDTO } from '@/types';
 
 export const getRootFolders = (portalMode = false) =>
   client.get<FolderVO[]>('/folders/root', { params: { portalMode } });
@@ -16,3 +16,5 @@ export const updateFolder = (data: FolderUpdateDTO) => client.put<FolderVO>('/fo
 export const deleteFolder = (folderCode: string) => client.delete(`/folders/${folderCode}`);
 
 export const updateFolderSort = (data: FolderSortDTO) => client.put('/folders/sort', data);
+
+export const moveFolder = (data: FolderMoveDTO) => client.put('/folders/move', data);

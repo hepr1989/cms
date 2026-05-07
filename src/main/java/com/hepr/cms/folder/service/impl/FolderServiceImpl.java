@@ -7,6 +7,7 @@ import com.hepr.cms.article.service.ArticleService;
 import com.hepr.cms.article.vo.ArticleVO;
 import com.hepr.cms.common.exception.BusinessException;
 import com.hepr.cms.folder.dto.FolderCreateDTO;
+import com.hepr.cms.folder.dto.FolderMoveDTO;
 import com.hepr.cms.folder.dto.FolderSortDTO;
 import com.hepr.cms.folder.dto.FolderUpdateDTO;
 import com.hepr.cms.folder.entity.Folder;
@@ -192,6 +193,73 @@ public class FolderServiceImpl implements FolderService {
             folderMapper.incrementSortGt(parentCode, target.getSort(), dto.getMovingCode());
             folderMapper.updateSortByCode(dto.getMovingCode(), target.getSort() + 1);
         }
+    }
+
+    @Override
+    @Transactional
+    public void moveFolder(FolderMoveDTO dto) {
+        Folder folder = folderMapper.selectOne(
+                new LambdaQueryWrapper<Folder>().eq(Folder::getFolderCode, dto.getFolderCode()));
+        if (folder == null) throw new BusinessException(404, "目录不存在");
+
+        // 不能移动到自己下面
+        if (dto.getFolderCode().equals(dto.getTargetParentFolderCode())) {
+            throw new BusinessException(400, "不能移动到自身目录下");
+        }
+
+        // 校验目标父目录存在且可用（根目录 -1 除外）
+        if (!"-1".equals(dto.getTargetParentFolderCode())) {
+            long count = folderMapper.selectCount(
+                    new LambdaQueryWrapper<Folder>()
+                            .eq(Folder::getFolderCode, dto.getTargetParentFolderCode())
+                            .eq(Folder::getStatus, 1));
+            if (count == 0) {
+                throw new BusinessException(400, "目标父目录不存在或已不可用");
+            }
+            // 防止将目录移动到自己的子目录下（循环引用）
+            if (isDescendant(dto.getFolderCode(), dto.getTargetParentFolderCode())) {
+                throw new BusinessException(400, "不能移动到自身子目录下");
+            }
+        }
+
+        // 如果提供了 targetCode 和 position，则定位到目标目录的相对位置
+        if (dto.getTargetCode() != null && dto.getPosition() != null) {
+            Folder target = folderMapper.selectOne(
+                    new LambdaQueryWrapper<Folder>().eq(Folder::getFolderCode, dto.getTargetCode()));
+            if (target == null) throw new BusinessException(404, "参考目录不存在");
+            if (!target.getParentFolderCode().equals(dto.getTargetParentFolderCode())) {
+                throw new BusinessException(400, "参考目录不在目标父目录下");
+            }
+
+            folder.setParentFolderCode(dto.getTargetParentFolderCode());
+            if ("BEFORE".equals(dto.getPosition())) {
+                folderMapper.incrementSortGte(dto.getTargetParentFolderCode(), target.getSort(), dto.getFolderCode());
+                folder.setSort(target.getSort());
+            } else {
+                folderMapper.incrementSortGt(dto.getTargetParentFolderCode(), target.getSort(), dto.getFolderCode());
+                folder.setSort(target.getSort() + 1);
+            }
+        } else {
+            // 追加到末尾
+            Integer maxSort = folderMapper.getMaxSort(dto.getTargetParentFolderCode());
+            folder.setParentFolderCode(dto.getTargetParentFolderCode());
+            folder.setSort(maxSort != null ? maxSort + 1 : 0);
+        }
+
+        folderMapper.updateById(folder);
+    }
+
+    /** 检查 targetCode 是否是 folderCode 的后代 */
+    private boolean isDescendant(String folderCode, String targetCode) {
+        List<Folder> children = folderMapper.selectList(
+                new LambdaQueryWrapper<Folder>()
+                        .eq(Folder::getParentFolderCode, folderCode)
+                        .eq(Folder::getStatus, 1));
+        for (Folder child : children) {
+            if (child.getFolderCode().equals(targetCode)) return true;
+            if (isDescendant(child.getFolderCode(), targetCode)) return true;
+        }
+        return false;
     }
 
     @Override

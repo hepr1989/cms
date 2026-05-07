@@ -1,6 +1,7 @@
 package com.hepr.cms.article.controller;
 
 import com.hepr.cms.article.dto.ArticleCreateDTO;
+import com.hepr.cms.article.dto.ArticleMoveDTO;
 import com.hepr.cms.article.dto.ArticleSortDTO;
 import com.hepr.cms.article.dto.ArticleUpdateDTO;
 import com.hepr.cms.article.service.ArticleService;
@@ -61,6 +62,12 @@ public class ArticleController {
     @PutMapping("/sort")
     public Result<Void> updateSort(@Validated @RequestBody ArticleSortDTO dto) {
         articleService.updateSort(dto);
+        return Result.ok();
+    }
+
+    @PutMapping("/move")
+    public Result<Void> moveArticle(@Validated @RequestBody ArticleMoveDTO dto) {
+        articleService.moveArticle(dto);
         return Result.ok();
     }
 }

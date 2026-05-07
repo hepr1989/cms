@@ -1,31 +1,33 @@
-package com.hepr.cms.service;
+package com.hepr.cms.folder.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hepr.cms.article.service.ArticleService;
 import com.hepr.cms.common.exception.BusinessException;
 import com.hepr.cms.folder.dto.FolderCreateDTO;
 import com.hepr.cms.folder.dto.FolderSortDTO;
-import com.hepr.cms.folder.dto.FolderUpdateDTO;
 import com.hepr.cms.folder.entity.Folder;
 import com.hepr.cms.folder.mapper.FolderMapper;
-import com.hepr.cms.folder.service.impl.FolderServiceImpl;
 import com.hepr.cms.folder.vo.FolderVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FolderServiceImplTest {
@@ -38,7 +40,6 @@ class FolderServiceImplTest {
     private FolderServiceImpl folderService;
 
     private Folder rootFolder;
-    private Folder childFolder;
 
     @BeforeEach
     void setUp() {
@@ -49,23 +50,18 @@ class FolderServiceImplTest {
         rootFolder.setParentFolderCode("-1");
         rootFolder.setStatus(1);
         rootFolder.setSort(0);
-
-        childFolder = new Folder();
-        childFolder.setId(2L);
-        childFolder.setFolderCode("fc_002");
-        childFolder.setTitle("后端开发");
-        childFolder.setParentFolderCode("fc_001");
-        childFolder.setStatus(1);
-        childFolder.setSort(0);
     }
 
+    /** 根目录列表应合并子目录数与文章数 */
     @Test
-    void getRootFolders_有数据_返回根级目录列表() {
-        when(folderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(rootFolder));
-        when(folderMapper.countChildrenByParentCodes(List.of("fc_001"))).thenReturn(Map.of("fc_001", Map.of("parentFolderCode", "fc_001", "cnt", 1L)));
-        when(articleService.countByFolderCodes(List.of("fc_001"), false)).thenReturn(Map.of("fc_001", 2));
+    void getRootFolders_whenData_populatesCounts() {
+        when(folderMapper.selectList(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(List.of(rootFolder));
+        Map<String, Object> countRow = new HashMap<>();
+        countRow.put("cnt", 1L);
+        when(folderMapper.countChildrenByParentCodes(anyList())).thenReturn(Map.of("fc_001", countRow));
+        when(articleService.countByFolderCodes(anyList(), anyBoolean())).thenReturn(Map.of("fc_001", 2));
 
-        List<FolderVO> result = folderService.getRootFolders();
+        List<FolderVO> result = folderService.getRootFolders(false);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getTitle()).isEqualTo("技术文档");
@@ -73,70 +69,78 @@ class FolderServiceImplTest {
         assertThat(result.get(0).getArticleCount()).isEqualTo(2);
     }
 
+    /** 无根级目录时返回空列表 */
     @Test
-    void getRootFolders_无数据_返回空列表() {
-        when(folderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+    void getRootFolders_whenEmpty_returnsEmptyList() {
+        when(folderMapper.selectList(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(Collections.emptyList());
 
-        List<FolderVO> result = folderService.getRootFolders();
+        List<FolderVO> result = folderService.getRootFolders(false);
 
         assertThat(result).isEmpty();
     }
 
+    /** 在根下创建目录时插入新记录 */
     @Test
-    void create_根级目录_成功() {
+    void create_atRoot_insertsFolder() {
         FolderCreateDTO dto = new FolderCreateDTO();
         dto.setTitle("新目录");
         dto.setParentFolderCode("-1");
 
-        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(null);
 
         FolderVO result = folderService.create(dto);
 
         assertThat(result).isNotNull();
+        verify(folderMapper).insert(any(Folder.class));
     }
 
+    /** 父目录编码无效时拒绝创建 */
     @Test
-    void create_子目录_父目录不存在_抛异常() {
+    void create_whenParentMissing_throws400() {
         FolderCreateDTO dto = new FolderCreateDTO();
         dto.setTitle("新目录");
         dto.setParentFolderCode("not_exist");
 
-        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(null);
 
         assertThatThrownBy(() -> folderService.create(dto))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("父目录不存在");
     }
 
+    /** 同父级下已有目录时，新目录 sort 在最大值基础上递增 */
     @Test
-    void create_sort自动递增() {
+    void create_whenMaxSortExists_incrementsSort() {
         FolderCreateDTO dto = new FolderCreateDTO();
         dto.setTitle("新目录2");
         dto.setParentFolderCode("-1");
 
         Folder existingFolder = new Folder();
         existingFolder.setSort(0);
-        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existingFolder);
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(existingFolder);
 
         FolderVO result = folderService.create(dto);
 
         assertThat(result).isNotNull();
+        verify(folderMapper).insert(any(Folder.class));
     }
 
+    /** 存在子目录时不允许删除 */
     @Test
-    void delete_有子目录_抛异常() {
-        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(rootFolder);
-        when(folderMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(1L);
+    void delete_whenHasChildFolders_throws400() {
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(rootFolder);
+        when(folderMapper.selectCount(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(1L);
 
         assertThatThrownBy(() -> folderService.delete("fc_001"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("子目录");
     }
 
+    /** 目录下仍有文章时不允许删除 */
     @Test
-    void delete_有文章_抛异常() {
-        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(rootFolder);
-        when(folderMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+    void delete_whenHasArticles_throws400() {
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(rootFolder);
+        when(folderMapper.selectCount(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(0L);
         when(articleService.countByFolderCode("fc_001")).thenReturn(2L);
 
         assertThatThrownBy(() -> folderService.delete("fc_001"))
@@ -144,10 +148,11 @@ class FolderServiceImplTest {
                 .hasMessageContaining("文章");
     }
 
+    /** 无子目录且无文章时可物理删除 */
     @Test
-    void delete_无子目录无文章_删除成功() {
-        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(rootFolder);
-        when(folderMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+    void delete_whenEmpty_deletesFolder() {
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(rootFolder);
+        when(folderMapper.selectCount(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(0L);
         when(articleService.countByFolderCode("fc_001")).thenReturn(0L);
         when(folderMapper.deleteById(1L)).thenReturn(1);
 
@@ -156,8 +161,9 @@ class FolderServiceImplTest {
         verify(folderMapper).deleteById(1L);
     }
 
+    /** BEFORE 排序时调用增量与更新 sort */
     @Test
-    void updateSort_BEFORE_成功() {
+    void updateSort_whenBeforeTarget_adjustsOrder() {
         Folder moving = new Folder();
         moving.setFolderCode("fc_001");
         moving.setParentFolderCode("-1");
@@ -168,10 +174,7 @@ class FolderServiceImplTest {
         target.setParentFolderCode("-1");
         target.setSort(1);
 
-        when(folderMapper.selectOne(argThat(w -> {
-            // match the moving code query
-            return true;
-        }))).thenReturn(moving).thenReturn(target);
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(moving, target);
 
         FolderSortDTO dto = new FolderSortDTO();
         dto.setMovingCode("fc_001");
@@ -184,8 +187,9 @@ class FolderServiceImplTest {
         verify(folderMapper).updateSortByCode("fc_001", 1);
     }
 
+    /** 移动项与目标项不在同一父级下则拒绝排序 */
     @Test
-    void updateSort_不同层级_抛异常() {
+    void updateSort_whenDifferentParent_throws400() {
         Folder moving = new Folder();
         moving.setFolderCode("fc_001");
         moving.setParentFolderCode("-1");
@@ -194,7 +198,7 @@ class FolderServiceImplTest {
         target.setFolderCode("fc_002");
         target.setParentFolderCode("fc_001");
 
-        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(moving).thenReturn(target);
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(moving, target);
 
         FolderSortDTO dto = new FolderSortDTO();
         dto.setMovingCode("fc_001");
@@ -206,9 +210,10 @@ class FolderServiceImplTest {
                 .hasMessageContaining("同一层级");
     }
 
+    /** 根据编码能查到目录时返回 VO */
     @Test
-    void getByCode_存在_返回VO() {
-        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(rootFolder);
+    void getByCode_whenExists_returnsVo() {
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(rootFolder);
 
         FolderVO result = folderService.getByCode("fc_001");
 
@@ -216,18 +221,20 @@ class FolderServiceImplTest {
         assertThat(result.getTitle()).isEqualTo("技术文档");
     }
 
+    /** 编码不存在时返回 null */
     @Test
-    void getByCode_不存在_返回null() {
-        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+    void getByCode_whenMissing_returnsNull() {
+        when(folderMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(null);
 
         FolderVO result = folderService.getByCode("not_exist");
 
         assertThat(result).isNull();
     }
 
+    /** 目录存在且 status=1 时 existsAndActive 为 true */
     @Test
-    void existsAndActive_存在且可用_返回true() {
-        when(folderMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(1L);
+    void existsAndActive_whenPresent_returnsTrue() {
+        when(folderMapper.selectCount(ArgumentMatchers.<LambdaQueryWrapper<Folder>>any())).thenReturn(1L);
 
         boolean result = folderService.existsAndActive("fc_001");
 

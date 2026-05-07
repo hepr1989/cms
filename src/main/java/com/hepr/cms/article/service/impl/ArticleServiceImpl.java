@@ -4,6 +4,7 @@ import com.hepr.cms.common.util.BeanCopyUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.hepr.cms.article.dto.ArticleCreateDTO;
+import com.hepr.cms.article.dto.ArticleMoveDTO;
 import com.hepr.cms.article.dto.ArticleSortDTO;
 import com.hepr.cms.article.dto.ArticleUpdateDTO;
 import com.hepr.cms.article.entity.Article;
@@ -216,6 +217,44 @@ public class ArticleServiceImpl implements ArticleService {
             articleMapper.incrementSortGt(folderCode, target.getSort(), dto.getMovingCode());
             articleMapper.updateSortByCode(dto.getMovingCode(), target.getSort() + 1);
         }
+    }
+
+    @Override
+    @Transactional
+    public void moveArticle(ArticleMoveDTO dto) {
+        Article article = articleMapper.selectOne(
+                new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, dto.getArticleCode()));
+        if (article == null) throw new BusinessException(404, "文章不存在");
+
+        if (!folderService.existsAndActive(dto.getTargetFolderCode())) {
+            throw new BusinessException(400, "目标目录不存在或已不可用");
+        }
+
+        // 如果提供了 targetCode 和 position，则定位到目标文章的相对位置
+        if (dto.getTargetCode() != null && dto.getPosition() != null) {
+            Article target = articleMapper.selectOne(
+                    new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, dto.getTargetCode()));
+            if (target == null) throw new BusinessException(404, "参考文章不存在");
+            if (!target.getFolderCode().equals(dto.getTargetFolderCode())) {
+                throw new BusinessException(400, "参考文章不在目标目录内");
+            }
+
+            article.setFolderCode(dto.getTargetFolderCode());
+            if ("BEFORE".equals(dto.getPosition())) {
+                articleMapper.incrementSortGte(dto.getTargetFolderCode(), target.getSort(), dto.getArticleCode());
+                article.setSort(target.getSort());
+            } else {
+                articleMapper.incrementSortGt(dto.getTargetFolderCode(), target.getSort(), dto.getArticleCode());
+                article.setSort(target.getSort() + 1);
+            }
+        } else {
+            // 追加到末尾
+            Integer maxSort = articleMapper.getMaxSort(dto.getTargetFolderCode());
+            article.setFolderCode(dto.getTargetFolderCode());
+            article.setSort(maxSort != null ? maxSort + 1 : 0);
+        }
+
+        articleMapper.updateById(article);
     }
 
     @Override

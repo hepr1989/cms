@@ -2,6 +2,7 @@ package com.hepr.cms.folder.controller;
 
 import com.hepr.cms.common.model.Result;
 import com.hepr.cms.folder.dto.FolderCreateDTO;
+import com.hepr.cms.folder.dto.FolderMoveDTO;
 import com.hepr.cms.folder.dto.FolderSortDTO;
 import com.hepr.cms.folder.dto.FolderUpdateDTO;
 import com.hepr.cms.folder.service.FolderService;
@@ -57,6 +58,12 @@ public class FolderController {
     @PutMapping("/sort")
     public Result<Void> updateSort(@Validated @RequestBody FolderSortDTO dto) {
         folderService.updateSort(dto);
+        return Result.ok();
+    }
+
+    @PutMapping("/move")
+    public Result<Void> moveFolder(@Validated @RequestBody FolderMoveDTO dto) {
+        folderService.moveFolder(dto);
         return Result.ok();
     }
 }

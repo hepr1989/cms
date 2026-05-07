@@ -10,17 +10,20 @@ vi.mock('../client', () => ({
 }));
 
 describe('folder API', () => {
-  it('createFolder 调用 POST /folders', async () => {
+  /** createFolder：POST /api/folders（经 client 封装） */
+  it('createFolder_postsPayloadAndReturnsFolder', async () => {
     const result = await createFolder({ title: '新目录', parentFolderCode: '-1' }) as any;
     expect(result.folderCode).toBe('new');
   });
 
-  it('getRootFolders 调用 GET /folders/root', async () => {
+  /** getRootFolders：GET 根列表并返回数组 */
+  it('getRootFolders_returnsArray', async () => {
     const result = await getRootFolders();
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it('updateFolderSort 传参正确', async () => {
+  /** updateFolderSort：PUT 排序参数 */
+  it('updateFolderSort_sendsSortPayload', async () => {
     await updateFolderSort({
       movingCode: 'a', targetCode: 'b', position: 'BEFORE',
     });

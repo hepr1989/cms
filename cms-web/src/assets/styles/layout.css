@@ -138,6 +138,15 @@
 }
 
 /* ===================== Tree Node ===================== */
+
+/* 拖拽占位节点：不可见，仅让 rc-tree 认为目录有子节点 */
+.sidebar-tree .drop-placeholder-node {
+  display: none;
+}
+.sidebar-tree .ant-tree-treenode-disabled:has(.drop-placeholder-node) {
+  display: none;
+}
+
 .tree-node-title {
   display: flex;
   align-items: center;

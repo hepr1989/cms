@@ -35,3 +35,10 @@ export interface ArticleSortDTO {
   targetCode: string;
   position: 'BEFORE' | 'AFTER';
 }
+
+export interface ArticleMoveDTO {
+  articleCode: string;
+  targetFolderCode: string;
+  targetCode?: string;
+  position?: 'BEFORE' | 'AFTER';
+}

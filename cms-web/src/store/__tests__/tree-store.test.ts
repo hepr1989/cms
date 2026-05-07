@@ -27,7 +27,8 @@ describe('treeStore', () => {
     });
   });
 
-  it('loadRootNodes 加载根目录', async () => {
+  /** loadRootNodes：从接口拉取并填充根目录树 */
+  it('loadRootNodes_populatesTreeFromApi', async () => {
     const store = useTreeStore.getState();
     await store.loadRootNodes();
     const state = useTreeStore.getState();
@@ -35,13 +36,15 @@ describe('treeStore', () => {
     expect(state.treeData[0].key).toBe('folder-f1');
   });
 
-  it('selectNode 设置 selectedKey', () => {
+  /** selectNode：写入当前选中的树节点 key */
+  it('selectNode_setsSelectedKey', () => {
     const store = useTreeStore.getState();
     store.selectNode('folder-f1');
     expect(useTreeStore.getState().selectedKey).toBe('folder-f1');
   });
 
-  it('expandFolder 未加载时调用 API', async () => {
+  /** expandFolder：子节点未加载时会请求 getChildren */
+  it('expandFolder_callsApiWhenChildrenNotLoaded', async () => {
     const store = useTreeStore.getState();
     await store.expandFolder('folder-f1');
     expect(useTreeStore.getState().loadedKeys.includes('folder-f1')).toBe(true);

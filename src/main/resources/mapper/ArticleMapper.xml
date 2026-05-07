@@ -23,6 +23,11 @@
         WHERE article_code = #{articleCode} AND del_flag = 0
     </update>
 
+    <select id="getMaxSort" resultType="java.lang.Integer">
+        SELECT MAX(sort) FROM cms_article
+        WHERE folder_code = #{folderCode} AND del_flag = 0
+    </select>
+
     <select id="countByFolderCodes" resultType="java.util.HashMap">
         SELECT folder_code AS folderCode, COUNT(*) AS cnt
         FROM cms_article

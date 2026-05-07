@@ -56,7 +56,8 @@ public class PdfImportServiceImpl implements PdfImportService {
             int imageCount = 0;
 
             for (int i = 0; i < document.getNumberOfPages(); i++) {
-                if (i > 0) markdown.append("\n\n");
+                if (i > 0)
+                    markdown.append("\n\n");
 
                 PDPage page = document.getPage(i);
 
@@ -70,12 +71,12 @@ public class PdfImportServiceImpl implements PdfImportService {
                 if (imageCount < MAX_IMAGES) {
                     List<ExtractedImage> images = extractImagesFromPage(page);
                     for (ExtractedImage img : images) {
-                        if (imageCount >= MAX_IMAGES) break;
+                        if (imageCount >= MAX_IMAGES)
+                            break;
                         imageCount++;
                         AttachmentVO attachment = attachmentService.uploadFromBytes(
                                 img.data, "image-" + imageCount + ".png", "image/png",
-                                "article", articleCode
-                        );
+                                "article", articleCode);
                         result.getAttachments().add(attachment);
                         markdown.append("\n\n![image-").append(imageCount).append("](")
                                 .append(attachment.getDownloadUrl()).append(")\n\n");
@@ -127,7 +128,8 @@ public class PdfImportServiceImpl implements PdfImportService {
             @Override
             protected void processTextPosition(TextPosition text) {
                 float fs = text.getFontSizeInPt();
-                if (fs <= 0) fs = text.getYScale();
+                if (fs <= 0)
+                    fs = text.getYScale();
                 if (fs > 0 && !text.isDiacritic()) {
                     allFontSizes.add(fs);
                 }
@@ -188,18 +190,16 @@ public class PdfImportServiceImpl implements PdfImportService {
         float y;
         float x;
         List<TextPosition> positions;
-        boolean bold;     // 是否为加粗文本
-        boolean centered; // 是否为居中文本
+        boolean bold; // 是否为加粗文本
 
         TextLine(String text, float fontSize, float y, float x, List<TextPosition> positions,
-                 boolean bold, boolean centered) {
+                boolean bold) {
             this.text = text;
             this.fontSize = fontSize;
             this.y = y;
             this.x = x;
             this.positions = positions;
             this.bold = bold;
-            this.centered = centered;
         }
     }
 
@@ -211,7 +211,6 @@ public class PdfImportServiceImpl implements PdfImportService {
         private StringBuilder currentText = new StringBuilder();
         private float currentY = -1;
         private float currentFontSize = -1;
-        private float pageWidth = 0; // 当前页面宽度，用于居中检测
 
         StructuredTextStripper() {
             super();
@@ -220,7 +219,6 @@ public class PdfImportServiceImpl implements PdfImportService {
 
         @Override
         protected void startPage(PDPage page) throws IOException {
-            pageWidth = page.getMediaBox().getWidth();
             super.startPage(page);
         }
 
@@ -235,7 +233,8 @@ public class PdfImportServiceImpl implements PdfImportService {
                 TextPosition tp = textPositions.get(i);
                 float y = Math.round(tp.getYDirAdj());
                 float fs = tp.getFontSizeInPt();
-                if (fs <= 0) fs = tp.getYScale();
+                if (fs <= 0)
+                    fs = tp.getYScale();
 
                 // Y 坐标变化超过 2pt 视为新行（提交上一行）
                 boolean yChanged = currentY >= 0 && Math.abs(y - currentY) > 2;
@@ -272,16 +271,13 @@ public class PdfImportServiceImpl implements PdfImportService {
         private void commitCurrentLine() {
             if (currentText.length() > 0) {
                 boolean lineBold = isLineBold(currentBoldFlags);
-                boolean lineCentered = isLineCentered(currentPositions, pageWidth);
                 lines.add(new TextLine(
                         currentText.toString().trim(),
                         currentFontSize,
                         currentY,
                         currentPositions.isEmpty() ? 0 : currentPositions.get(0).getXDirAdj(),
                         new ArrayList<>(currentPositions),
-                        lineBold,
-                        lineCentered
-                ));
+                        lineBold));
             }
             currentText = new StringBuilder();
             currentPositions.clear();
@@ -294,8 +290,6 @@ public class PdfImportServiceImpl implements PdfImportService {
         void flush() {
             commitCurrentLine();
         }
-
-        float getPageWidth() { return pageWidth; }
     }
 
     /** 判断单个字符是否为加粗 */
@@ -315,27 +309,14 @@ public class PdfImportServiceImpl implements PdfImportService {
 
     /** 判断一行文本是否以加粗为主（超过 50% 的字符为加粗） */
     private static boolean isLineBold(List<Boolean> boldFlags) {
-        if (boldFlags.isEmpty()) return false;
+        if (boldFlags.isEmpty())
+            return false;
         long boldCount = boldFlags.stream().filter(b -> b).count();
         return boldCount > boldFlags.size() / 2;
     }
 
-    /** 判断一行文本是否居中（文本左右边距大致相等） */
-    private static boolean isLineCentered(List<TextPosition> positions, float pageWidth) {
-        if (positions.isEmpty() || pageWidth <= 0) return false;
-        float startX = positions.get(0).getXDirAdj();
-        float endX = positions.get(positions.size() - 1).getXDirAdj()
-                + positions.get(positions.size() - 1).getWidthDirAdj();
-        float leftMargin = startX;
-        float rightMargin = pageWidth - endX;
-        float minMargin = Math.min(leftMargin, rightMargin);
-        // 左右边距都大于页面宽度的 15%，且差异小于较小边距的 30%
-        // 这样排除了仅有左缩进的普通段落
-        return minMargin > pageWidth * 0.15f
-                && Math.abs(leftMargin - rightMargin) < minMargin * 0.35f;
-    }
-
-    private String extractStructuredText(PDDocument document, int pageIndex, FontStats fontStats, String articleTitle) throws IOException {
+    private String extractStructuredText(PDDocument document, int pageIndex, FontStats fontStats, String articleTitle)
+            throws IOException {
         StructuredTextStripper stripper = new StructuredTextStripper();
         stripper.setStartPage(pageIndex + 1);
         stripper.setEndPage(pageIndex + 1);
@@ -343,13 +324,14 @@ public class PdfImportServiceImpl implements PdfImportService {
         stripper.flush();
 
         // 后处理：合并同一 Y 坐标上的多个文本行（处理同一行被多次 writeString 调用分割的情况，如表格单元格）
-        List<TextLine> mergedLines = mergeSameYLines(stripper.lines, stripper.getPageWidth());
+        List<TextLine> mergedLines = mergeSameYLines(stripper.lines);
         return convertLinesToMarkdown(mergedLines, fontStats, articleTitle);
     }
 
     /** 合并同一 Y 坐标上的多个文本行 */
-    private List<TextLine> mergeSameYLines(List<TextLine> lines, float pageWidth) {
-        if (lines.size() <= 1) return lines;
+    private List<TextLine> mergeSameYLines(List<TextLine> lines) {
+        if (lines.size() <= 1)
+            return lines;
 
         List<TextLine> result = new ArrayList<>();
         List<TextLine> group = new ArrayList<>();
@@ -357,7 +339,7 @@ public class PdfImportServiceImpl implements PdfImportService {
         for (TextLine line : lines) {
             if (line.text.trim().isEmpty()) {
                 if (!group.isEmpty()) {
-                    result.add(mergeSameYGroup(group, pageWidth));
+                    result.add(mergeSameYGroup(group));
                     group.clear();
                 }
                 result.add(line);
@@ -371,7 +353,7 @@ public class PdfImportServiceImpl implements PdfImportService {
                 if (Math.abs(line.y - first.y) <= 2) {
                     group.add(line);
                 } else {
-                    result.add(mergeSameYGroup(group, pageWidth));
+                    result.add(mergeSameYGroup(group));
                     group.clear();
                     group.add(line);
                 }
@@ -379,15 +361,16 @@ public class PdfImportServiceImpl implements PdfImportService {
         }
 
         if (!group.isEmpty()) {
-            result.add(mergeSameYGroup(group, pageWidth));
+            result.add(mergeSameYGroup(group));
         }
 
         return result;
     }
 
     /** 合并同一 Y 坐标上的多个行为一个 TextLine（按 X 排序，大间隙用双空格分隔以支持表格检测） */
-    private TextLine mergeSameYGroup(List<TextLine> group, float pageWidth) {
-        if (group.size() == 1) return group.get(0);
+    private TextLine mergeSameYGroup(List<TextLine> group) {
+        if (group.size() == 1)
+            return group.get(0);
 
         List<TextLine> sorted = new ArrayList<>(group);
         sorted.sort((a, b) -> Float.compare(a.x, b.x));
@@ -428,30 +411,28 @@ public class PdfImportServiceImpl implements PdfImportService {
             mergedPositions.addAll(line.positions);
         }
 
-        boolean centered = isLineCentered(mergedPositions, pageWidth);
-
         return new TextLine(
                 mergedText.toString(),
                 maxFontSize,
                 sorted.get(0).y,
                 sorted.get(0).x,
                 mergedPositions,
-                anyBold,
-                centered
-        );
+                anyBold);
     }
 
     private String convertLinesToMarkdown(List<TextLine> lines, FontStats fontStats, String articleTitle) {
-        if (lines.isEmpty()) return "";
+        if (lines.isEmpty())
+            return "";
 
         // 先统计正文行的常见 X 起始位置，用于判断段落缩进
         Map<Float, Long> xFreq = new HashMap<>();
         for (TextLine l : lines) {
-            if (l.text.trim().isEmpty()) continue;
+            if (l.text.trim().isEmpty())
+                continue;
             float roundedX = Math.round(l.x);
             // 只统计非标题的正文行
             if (!fontStats.isH1(l.fontSize) && !fontStats.isH2(l.fontSize) && !fontStats.isH3(l.fontSize)) {
-                xFreq.merge(roundedX, 1L, Long::sum);
+                xFreq.put(roundedX, xFreq.getOrDefault(roundedX, 0L) + 1L);
             }
         }
         float bodyStartX = xFreq.entrySet().stream()
@@ -515,7 +496,8 @@ public class PdfImportServiceImpl implements PdfImportService {
                     i++;
                     continue;
                 }
-                if ("# ".equals(headingPrefix)) titleSkipped = true;
+                if ("# ".equals(headingPrefix))
+                    titleSkipped = true;
                 md.append("\n\n").append(headingPrefix).append(text).append("\n\n");
             } else {
                 // 加粗处理
@@ -579,11 +561,13 @@ public class PdfImportServiceImpl implements PdfImportService {
         int endLineIndex;
 
         String toMarkdown() {
-            if (rows.isEmpty()) return "";
+            if (rows.isEmpty())
+                return "";
 
             // 计算最大列数
             int maxCols = rows.stream().mapToInt(r -> r.length).max().orElse(0);
-            if (maxCols <= 1) return rows.stream().map(r -> String.join(" ", r)).collect(Collectors.joining("\n"));
+            if (maxCols <= 1)
+                return rows.stream().map(r -> String.join(" ", r)).collect(Collectors.joining("\n"));
 
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < rows.size(); i++) {
@@ -610,7 +594,8 @@ public class PdfImportServiceImpl implements PdfImportService {
 
     /** 检测从 startLineIndex 开始的表格。返回 null 表示未检测到表格。 */
     private TableBlock detectTable(List<TextLine> lines, int startLineIndex) {
-        if (startLineIndex >= lines.size()) return null;
+        if (startLineIndex >= lines.size())
+            return null;
 
         // 策略1：基于 X 坐标间隙检测列分隔
         TextLine firstLine = lines.get(startLineIndex);
@@ -653,7 +638,8 @@ public class PdfImportServiceImpl implements PdfImportService {
         int endIdx = startLineIndex;
         for (int i = startLineIndex + 1; i < lines.size() && i < startLineIndex + 50; i++) {
             TextLine line = lines.get(i);
-            if (line.text.trim().isEmpty()) break;
+            if (line.text.trim().isEmpty())
+                break;
 
             String[] lineTextCols = splitByMultipleSpaces(line.text);
             List<Float> lineXBreaks = detectColumnBreaks(line);
@@ -687,7 +673,8 @@ public class PdfImportServiceImpl implements PdfImportService {
             }
         }
 
-        if (table.rows.size() < 2) return null;
+        if (table.rows.size() < 2)
+            return null;
 
         table.endLineIndex = endIdx;
         return table;
@@ -695,20 +682,23 @@ public class PdfImportServiceImpl implements PdfImportService {
 
     /** 按多个连续空格分割文本为列 */
     private String[] splitByMultipleSpaces(String text) {
-        if (text == null || text.trim().isEmpty()) return new String[0];
+        if (text == null || text.trim().isEmpty())
+            return new String[0];
         // 2个及以上连续空格视为列分隔
         String[] parts = text.trim().split("\\s{2,}");
         // 过滤空串
         List<String> result = new ArrayList<>();
         for (String p : parts) {
-            if (!p.trim().isEmpty()) result.add(p.trim());
+            if (!p.trim().isEmpty())
+                result.add(p.trim());
         }
         return result.toArray(new String[0]);
     }
 
     /** 检测一行文本中的列分隔点（X 坐标的大间隙） */
     private List<Float> detectColumnBreaks(TextLine line) {
-        if (line.positions.size() < 2) return Collections.emptyList();
+        if (line.positions.size() < 2)
+            return Collections.emptyList();
 
         List<Float> breaks = new ArrayList<>();
         float prevEndX = -1;
@@ -736,7 +726,7 @@ public class PdfImportServiceImpl implements PdfImportService {
     /** 根据列分隔点将一行文本拆分为多个单元格 */
     private String[] splitLineByColumns(TextLine line, List<Float> colBreaks) {
         if (colBreaks.isEmpty() || line.positions.isEmpty()) {
-            return new String[]{line.text};
+            return new String[] { line.text };
         }
 
         // 排序列分隔点
@@ -806,7 +796,8 @@ public class PdfImportServiceImpl implements PdfImportService {
         // 回退到 PDF 元数据标题
         try {
             String title = document.getDocumentInformation() != null
-                    ? document.getDocumentInformation().getTitle() : null;
+                    ? document.getDocumentInformation().getTitle()
+                    : null;
             if (title != null && !title.trim().isEmpty() && !isPlaceholderTitle(title)) {
                 return title.trim();
             }
@@ -827,14 +818,18 @@ public class PdfImportServiceImpl implements PdfImportService {
 
     /** 判断是否为占位标题（元数据中常见的不具有实际意义的标题） */
     private boolean isPlaceholderTitle(String title) {
-        if (title == null) return true;
+        if (title == null)
+            return true;
         String t = title.trim().toLowerCase();
-        if (t.isEmpty()) return true;
+        if (t.isEmpty())
+            return true;
         // 常见占位标题
         if (t.equals("(anonymous)") || t.equals("anonymous") || t.equals("untitled")
-                || t.equals("title") || t.equals("无标题")) return true;
+                || t.equals("title") || t.equals("无标题"))
+            return true;
         // 纯数字或过短
-        if (t.length() <= 2 && t.matches("\\d+")) return true;
+        if (t.length() <= 2 && t.matches("\\d+"))
+            return true;
         return false;
     }
 
@@ -850,12 +845,14 @@ public class PdfImportServiceImpl implements PdfImportService {
             protected void writeString(String text, List<TextPosition> textPositions) throws IOException {
                 for (TextPosition tp : textPositions) {
                     float fs = tp.getFontSizeInPt();
-                    if (fs <= 0) fs = tp.getYScale();
+                    if (fs <= 0)
+                        fs = tp.getYScale();
                     float y = Math.round(tp.getYDirAdj());
 
                     if (currentY >= 0 && Math.abs(y - currentY) > 2) {
                         if (currentLine.length() > 0) {
-                            lines.add(new TextLine(currentLine.toString().trim(), currentFs, currentY, 0, Collections.emptyList(), false, false));
+                            lines.add(new TextLine(currentLine.toString().trim(), currentFs, currentY, 0,
+                                    Collections.emptyList(), false));
                         }
                         currentLine = new StringBuilder();
                         currentFs = fs;
@@ -871,7 +868,8 @@ public class PdfImportServiceImpl implements PdfImportService {
             @Override
             protected void endPage(PDPage page) throws IOException {
                 if (currentLine.length() > 0) {
-                    lines.add(new TextLine(currentLine.toString().trim(), currentFs, currentY, 0, Collections.emptyList(), false, false));
+                    lines.add(new TextLine(currentLine.toString().trim(), currentFs, currentY, 0,
+                            Collections.emptyList(), false));
                 }
                 super.endPage(page);
             }
@@ -882,19 +880,22 @@ public class PdfImportServiceImpl implements PdfImportService {
         titleStripper.setEndPage(1);
         titleStripper.getText(document);
 
-        if (lines.isEmpty()) return null;
+        if (lines.isEmpty())
+            return null;
 
         // 找到最大字号
-        float maxFs = lines.stream().map(l -> l.fontSize).max(Float::compare).orElse(0f);
+        float maxFs = (float) lines.stream().mapToDouble(l -> l.fontSize).max().orElse(0.0);
 
         // 第一页中字号最大的前几行拼成标题
         StringBuilder title = new StringBuilder();
         for (TextLine line : lines) {
             if (line.fontSize >= maxFs * 0.95 && !line.text.trim().isEmpty()) {
-                if (title.length() > 0) title.append(" ");
+                if (title.length() > 0)
+                    title.append(" ");
                 title.append(line.text.trim());
                 // 只取前 2 行大字文本
-                if (title.length() > 100) break;
+                if (title.length() > 100)
+                    break;
             } else if (title.length() > 0) {
                 break; // 已经有大字文本，遇到小字就停止
             }
@@ -902,7 +903,8 @@ public class PdfImportServiceImpl implements PdfImportService {
 
         String result = title.toString().trim();
         // 标题不应太长（超过 200 字可能是正文）
-        if (result.length() > 200) return null;
+        if (result.length() > 200)
+            return null;
         return result.isEmpty() ? null : result;
     }
 
@@ -912,7 +914,8 @@ public class PdfImportServiceImpl implements PdfImportService {
         List<ExtractedImage> images = new ArrayList<>();
         PDResources resources = page.getResources();
 
-        if (resources == null) return images;
+        if (resources == null)
+            return images;
 
         for (COSName name : resources.getXObjectNames()) {
             try {
@@ -922,16 +925,19 @@ public class PdfImportServiceImpl implements PdfImportService {
                     int width = image.getWidth();
                     int height = image.getHeight();
 
-                    if (width < MIN_IMAGE_DIMENSION && height < MIN_IMAGE_DIMENSION) continue;
+                    if (width < MIN_IMAGE_DIMENSION && height < MIN_IMAGE_DIMENSION)
+                        continue;
                     if (width < ICON_MAX_DIMENSION && height < ICON_MAX_DIMENSION
-                            && Math.abs(width - height) <= Math.max(width, height) * 0.2) continue;
+                            && Math.abs(width - height) <= Math.max(width, height) * 0.2)
+                        continue;
 
                     BufferedImage bufferedImage = image.getImage();
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     ImageIO.write(bufferedImage, "PNG", baos);
                     byte[] imageData = baos.toByteArray();
 
-                    if (imageData.length < 500) continue;
+                    if (imageData.length < 500)
+                        continue;
 
                     images.add(new ExtractedImage(imageData, width, height));
                 }
@@ -947,7 +953,8 @@ public class PdfImportServiceImpl implements PdfImportService {
 
     private List<String> extractLinksFromPage(PDPage page) throws IOException {
         List<String> links = new ArrayList<>();
-        if (page.getAnnotations() == null) return links;
+        if (page.getAnnotations() == null)
+            return links;
 
         for (PDAnnotation annotation : page.getAnnotations()) {
             if (annotation instanceof PDAnnotationLink link) {
@@ -969,20 +976,24 @@ public class PdfImportServiceImpl implements PdfImportService {
 
         try {
             PDDocumentNameDictionary names = document.getDocumentCatalog().getNames();
-            if (names == null) return attachments;
+            if (names == null)
+                return attachments;
 
             PDEmbeddedFilesNameTreeNode embeddedFilesNode = names.getEmbeddedFiles();
-            if (embeddedFilesNode == null) return attachments;
+            if (embeddedFilesNode == null)
+                return attachments;
 
             Map<String, PDComplexFileSpecification> fileMap = embeddedFilesNode.getNames();
-            if (fileMap == null) return attachments;
+            if (fileMap == null)
+                return attachments;
 
             for (Map.Entry<String, PDComplexFileSpecification> entry : fileMap.entrySet()) {
                 try {
                     String fileName = entry.getKey();
                     PDComplexFileSpecification fileSpec = entry.getValue();
                     var embeddedFile = fileSpec.getEmbeddedFile();
-                    if (embeddedFile == null) continue;
+                    if (embeddedFile == null)
+                        continue;
 
                     byte[] data = embeddedFile.toByteArray();
 
@@ -992,8 +1003,7 @@ public class PdfImportServiceImpl implements PdfImportService {
                     }
 
                     AttachmentVO att = attachmentService.uploadFromBytes(
-                            data, fileName, contentType, "article", articleCode
-                    );
+                            data, fileName, contentType, "article", articleCode);
                     attachments.add(att);
                 } catch (Exception e) {
                     log.warn("Failed to extract embedded file '{}': {}", entry.getKey(), e.getMessage());
@@ -1007,18 +1017,28 @@ public class PdfImportServiceImpl implements PdfImportService {
     }
 
     private String guessContentType(String fileName) {
-        if (fileName == null) return "application/octet-stream";
+        if (fileName == null)
+            return "application/octet-stream";
         String lower = fileName.toLowerCase();
-        if (lower.endsWith(".pdf")) return "application/pdf";
-        if (lower.endsWith(".doc") || lower.endsWith(".docx")) return "application/msword";
-        if (lower.endsWith(".xls") || lower.endsWith(".xlsx")) return "application/vnd.ms-excel";
-        if (lower.endsWith(".ppt") || lower.endsWith(".pptx")) return "application/vnd.ms-powerpoint";
-        if (lower.endsWith(".zip")) return "application/zip";
-        if (lower.endsWith(".png")) return "image/png";
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-        if (lower.endsWith(".txt")) return "text/plain";
+        if (lower.endsWith(".pdf"))
+            return "application/pdf";
+        if (lower.endsWith(".doc") || lower.endsWith(".docx"))
+            return "application/msword";
+        if (lower.endsWith(".xls") || lower.endsWith(".xlsx"))
+            return "application/vnd.ms-excel";
+        if (lower.endsWith(".ppt") || lower.endsWith(".pptx"))
+            return "application/vnd.ms-powerpoint";
+        if (lower.endsWith(".zip"))
+            return "application/zip";
+        if (lower.endsWith(".png"))
+            return "image/png";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg"))
+            return "image/jpeg";
+        if (lower.endsWith(".txt"))
+            return "text/plain";
         return "application/octet-stream";
     }
 
-    private record ExtractedImage(byte[] data, int width, int height) {}
+    private record ExtractedImage(byte[] data, int width, int height) {
+    }
 }

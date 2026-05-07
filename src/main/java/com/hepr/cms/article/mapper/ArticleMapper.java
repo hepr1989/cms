@@ -21,6 +21,8 @@ public interface ArticleMapper extends BaseMapper<Article> {
 
     void updateSortByCode(@Param("articleCode") String articleCode, @Param("sort") int sort);
 
+    Integer getMaxSort(@Param("folderCode") String folderCode);
+
     @MapKey("folderCode")
     Map<String, Map<String, Object>> countByFolderCodes(@Param("folderCodes") List<String> folderCodes,
                                                          @Param("publishedOnly") boolean publishedOnly);

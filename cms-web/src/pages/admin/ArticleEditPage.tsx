@@ -8,6 +8,7 @@ import ArticleStatusBadge from '@/components/article/ArticleStatusBadge';
 import MarkdownEditor from '@/components/article/MarkdownEditor';
 import MetadataBar from '@/components/common/MetadataBar';
 import { deleteArticle } from '@/api/article';
+import { ArticleStatus } from '@/types';
 import type { TreeDataNode } from '@/types';
 
 function findNode(nodes: TreeDataNode[], key: string): TreeDataNode | null {
@@ -42,6 +43,8 @@ export default function ArticleEditPage() {
   const treeData = useTreeStore(s => s.treeData);
   const syncSelection = useTreeStore(s => s.syncSelection);
   const removeNode = useTreeStore(s => s.removeNode);
+  const updateNode = useTreeStore(s => s.updateNode);
+  const addArticleNode = useTreeStore(s => s.addArticleNode);
 
   // 是否为最外层目录下的内容（父级是根目录则不显示返回按钮）
   const isTopLevel = useMemo(() => {
@@ -100,17 +103,37 @@ export default function ArticleEditPage() {
   };
 
   const doSave = async () => {
-    await saveArticle();
+    const isNew = !currentArticle?.articleCode;
+    const result = await saveArticle();
+    if (result.articleCode) {
+      if (isNew) {
+        // 新建文章：添加节点到目录树
+        addArticleNode(`folder-${result.folderCode}`, result);
+        // 导航到编辑页（URL 从 /new 变为 /article/{code}）
+        navigate(`/admin/article/${result.articleCode}`, { replace: true });
+      } else {
+        // 已有文章：更新树节点
+        updateNode(`article-${result.articleCode}`, { title: result.title, status: result.status });
+      }
+    }
     message.success('保存成功');
   };
 
   const handlePublish = async () => {
-    try { await publishArticle(); message.success('发布成功'); }
+    try {
+      await publishArticle();
+      updateNode(`article-${articleCode}`, { status: ArticleStatus.PUBLISHED });
+      message.success('发布成功');
+    }
     catch (e: any) { message.error(e.message || '发布失败'); }
   };
 
   const handleOffline = async () => {
-    try { await offlineArticle(); message.success('已下线'); }
+    try {
+      await offlineArticle();
+      updateNode(`article-${articleCode}`, { status: ArticleStatus.OFFLINE });
+      message.success('已下线');
+    }
     catch (e: any) { message.error(e.message || '下线失败'); }
   };
 

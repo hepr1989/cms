@@ -36,3 +36,10 @@ export interface FolderSortDTO {
   targetCode: string;
   position: 'BEFORE' | 'AFTER';
 }
+
+export interface FolderMoveDTO {
+  folderCode: string;
+  targetParentFolderCode: string;
+  targetCode?: string;
+  position?: 'BEFORE' | 'AFTER';
+}

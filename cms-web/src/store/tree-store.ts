@@ -24,6 +24,7 @@ interface TreeState {
   removeNode: (key: string) => void;
   updateNode: (key: string, partial: Partial<TreeDataNode>) => void;
   refreshChildren: (folderKey: string) => Promise<void>;
+  refreshRootNodes: () => Promise<void>;
   setExpandedKeys: (keys: string[]) => void;
   syncSelection: (key: string) => Promise<void>;
 }
@@ -223,12 +224,28 @@ export const useTreeStore = create<TreeState>()(immer((set, get) => ({
       state.loadedKeys = state.loadedKeys.filter(k => k !== folderKey);
       const parentNode = findNode(state.treeData, folderKey);
       if (parentNode) {
+        // 清除子目录的 loadedKeys，因为重新加载后子目录节点会被重建（带 __loading__ 占位符）
+        // 如果不清除，展开子目录时会因 loadedKeys 命中而跳过加载，导致无法展开
+        if (parentNode.children) {
+          for (const child of parentNode.children) {
+            if (child.type === 'folder') {
+              state.loadedKeys = state.loadedKeys.filter(k => k !== child.key);
+            }
+          }
+        }
         parentNode.children = parentNode.hasChildren
           ? [{ key: '__loading__', title: '加载中...', type: 'folder', isLeaf: true, parentKey: folderKey, code: '' }]
           : undefined;
       }
     });
     await get().loadChildren(folderKey);
+  },
+
+  refreshRootNodes: async () => {
+    const portalMode = get().mode === 'portal';
+    const folders = await getRootFolders(portalMode) as unknown as FolderVO[];
+    const nodes = folders.map(f => folderToNode(f, '-1'));
+    set({ treeData: nodes });
   },
 
   setExpandedKeys: (keys: string[]) => {

@@ -1,13 +1,13 @@
-package com.hepr.cms.service;
+package com.hepr.cms.article.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hepr.cms.article.dto.ArticleCreateDTO;
 import com.hepr.cms.article.dto.ArticleUpdateDTO;
 import com.hepr.cms.article.entity.Article;
-import com.hepr.cms.article.enums.ArticleStatus;
 import com.hepr.cms.article.mapper.ArticleMapper;
-import com.hepr.cms.article.service.impl.ArticleServiceImpl;
+import com.hepr.cms.article.service.pdfimport.PdfImportService;
 import com.hepr.cms.article.vo.ArticleVO;
+import com.hepr.cms.attachment.entity.AttachmentRef;
 import com.hepr.cms.attachment.mapper.AttachmentRefMapper;
 import com.hepr.cms.common.exception.BusinessException;
 import com.hepr.cms.folder.service.FolderService;
@@ -15,17 +15,19 @@ import com.hepr.cms.folder.vo.FolderVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Collections;
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ArticleServiceImplTest {
@@ -34,6 +36,8 @@ class ArticleServiceImplTest {
     private ArticleMapper articleMapper;
     @Mock
     private AttachmentRefMapper attachmentRefMapper;
+    @Mock
+    private PdfImportService pdfImportService;
     @Mock
     private FolderService folderService;
     @InjectMocks
@@ -53,9 +57,10 @@ class ArticleServiceImplTest {
         draftArticle.setSort(0);
     }
 
+    /** 文章存在时返回详情，并写入所属目录标题 */
     @Test
-    void getDetail_文章存在_填充folderTitle() {
-        when(articleMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(draftArticle);
+    void getDetail_whenArticleExists_setsFolderTitle() {
+        when(articleMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(draftArticle);
         FolderVO folderVO = new FolderVO();
         folderVO.setTitle("后端开发");
         when(folderService.getByCode("fc_001")).thenReturn(folderVO);
@@ -65,17 +70,19 @@ class ArticleServiceImplTest {
         assertThat(result.getFolderTitle()).isEqualTo("后端开发");
     }
 
+    /** 文章不存在时抛出 404 */
     @Test
-    void getDetail_文章不存在_抛404() {
-        when(articleMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+    void getDetail_whenArticleMissing_throws404() {
+        when(articleMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(null);
 
         assertThatThrownBy(() -> articleService.getDetail("not_exist"))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404));
     }
 
+    /** 所属目录不可用时不创建，抛出业务异常 */
     @Test
-    void create_目录不存在_抛400() {
+    void create_whenFolderInactive_throws400() {
         when(folderService.existsAndActive("not_exist")).thenReturn(false);
 
         ArticleCreateDTO dto = new ArticleCreateDTO();
@@ -84,16 +91,17 @@ class ArticleServiceImplTest {
 
         assertThatThrownBy(() -> articleService.create(dto))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("目录不存在");
+                .hasMessageContaining("所属目录不存在或已不可用");
     }
 
+    /** 目录有效时插入文章，并按当前最大 sort 递增 */
     @Test
-    void create_成功_sort自动递增() {
+    void create_whenValid_incrementsSortAndInserts() {
         when(folderService.existsAndActive("fc_001")).thenReturn(true);
 
         Article existingArticle = new Article();
         existingArticle.setSort(0);
-        when(articleMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existingArticle);
+        when(articleMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(existingArticle);
 
         ArticleCreateDTO dto = new ArticleCreateDTO();
         dto.setTitle("新文章");
@@ -103,33 +111,37 @@ class ArticleServiceImplTest {
         ArticleVO result = articleService.create(dto);
 
         assertThat(result).isNotNull();
+        verify(articleMapper).insert(any(Article.class));
     }
 
+    /** 草稿发布为已发布并写入发布时间 */
     @Test
-    void publish_草稿发布_成功() {
+    void publish_whenDraft_setsPublished() {
         draftArticle.setStatus("DRAFT");
-        when(articleMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(draftArticle);
+        when(articleMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(draftArticle);
         when(articleMapper.updateById(any(Article.class))).thenReturn(1);
 
         articleService.publish("ac_001");
 
         verify(articleMapper).updateById(argThat(a ->
-                a.getStatus().equals("PUBLISHED") && a.getPublishedAt() != null
+                "PUBLISHED".equals(a.getStatus()) && a.getPublishedAt() != null
         ));
     }
 
+    /** 已是已发布状态再次发布应拒绝 */
     @Test
-    void publish_已发布再发布_抛400() {
+    void publish_whenAlreadyPublished_throws400() {
         draftArticle.setStatus("PUBLISHED");
-        when(articleMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(draftArticle);
+        when(articleMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(draftArticle);
 
         assertThatThrownBy(() -> articleService.publish("ac_001"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("当前状态不允许发布");
     }
 
+    /** 已发布文章被编辑后应回到草稿并清空发布时间 */
     @Test
-    void update_已发布文章修改后变草稿() {
+    void update_whenPublished_resetsToDraft() {
         draftArticle.setStatus("PUBLISHED");
         draftArticle.setPublishedAt(java.time.LocalDateTime.now());
 
@@ -139,59 +151,61 @@ class ArticleServiceImplTest {
         dto.setContentMd("# Modified");
         dto.setFolderCode("fc_001");
 
-        when(articleMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(draftArticle);
+        when(articleMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(draftArticle);
         when(articleMapper.updateById(any(Article.class))).thenReturn(1);
 
         articleService.update(dto);
 
         verify(articleMapper).updateById(argThat(a ->
-                a.getStatus().equals("DRAFT") && a.getPublishedAt() == null
+                "DRAFT".equals(a.getStatus()) && a.getPublishedAt() == null
         ));
     }
 
+    /** 已发布文章可下线为 OFFLINE */
     @Test
-    void offline_已发布下线_成功() {
+    void offline_whenPublished_setsOffline() {
         draftArticle.setStatus("PUBLISHED");
-        when(articleMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(draftArticle);
+        when(articleMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(draftArticle);
         when(articleMapper.updateById(any(Article.class))).thenReturn(1);
 
         articleService.offline("ac_001");
 
-        verify(articleMapper).updateById(argThat(a ->
-                a.getStatus().equals("OFFLINE")
-        ));
+        verify(articleMapper).updateById(argThat(a -> "OFFLINE".equals(a.getStatus())));
     }
 
+    /** 草稿不允许下线 */
     @Test
-    void offline_草稿下线_抛400() {
+    void offline_whenDraft_throws400() {
         draftArticle.setStatus("DRAFT");
-        when(articleMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(draftArticle);
+        when(articleMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(draftArticle);
 
         assertThatThrownBy(() -> articleService.offline("ac_001"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("当前状态不允许下线");
     }
 
+    /** 删除文章时同时按条件删除附件关联 */
     @Test
-    void delete_文章删除_同时删除关联ref() {
-        when(articleMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(draftArticle);
+    void delete_removesArticleAndAttachmentRefs() {
+        when(articleMapper.selectOne(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(draftArticle);
         when(articleMapper.deleteById(1L)).thenReturn(1);
-        when(attachmentRefMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
 
         articleService.delete("ac_001");
 
         verify(articleMapper).deleteById(1L);
+        verify(attachmentRefMapper).delete(ArgumentMatchers.<LambdaQueryWrapper<AttachmentRef>>any());
     }
 
+    /** 搜索关键词过短时不查库，直接返回空列表 */
     @Test
-    void search_关键词过短_返回空() {
-        List<?> result = articleService.search("a", false);
-        assertThat(result).isEmpty();
+    void search_whenKeywordTooShort_returnsEmpty() {
+        assertThat(articleService.search("a", false)).isEmpty();
     }
 
+    /** 关键词长度足够且命中标题时返回搜索结果 */
     @Test
-    void search_匹配标题_返回结果() {
-        when(articleMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(draftArticle));
+    void search_whenMatchesTitle_returnsResults() {
+        when(articleMapper.selectList(ArgumentMatchers.<LambdaQueryWrapper<Article>>any())).thenReturn(List.of(draftArticle));
         when(folderService.getByCode("fc_001")).thenReturn(null);
 
         var result = articleService.search("测试", false);

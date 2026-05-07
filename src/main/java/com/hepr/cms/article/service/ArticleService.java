@@ -1,6 +1,7 @@
 package com.hepr.cms.article.service;
 
 import com.hepr.cms.article.dto.ArticleCreateDTO;
+import com.hepr.cms.article.dto.ArticleMoveDTO;
 import com.hepr.cms.article.dto.ArticleSortDTO;
 import com.hepr.cms.article.dto.ArticleUpdateDTO;
 import com.hepr.cms.article.vo.ArticleVO;
@@ -19,6 +20,7 @@ public interface ArticleService {
     void offline(String articleCode);
     void delete(String articleCode);
     void updateSort(ArticleSortDTO dto);
+    void moveArticle(ArticleMoveDTO dto);
 
     List<ArticleVO> listByFolderCode(String folderCode, boolean portalMode);
     long countByFolderCode(String folderCode);

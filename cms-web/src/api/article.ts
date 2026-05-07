@@ -1,5 +1,5 @@
 import client from './client';
-import type { ArticleVO, ArticleCreateDTO, ArticleUpdateDTO, ArticleSortDTO } from '@/types';
+import type { ArticleVO, ArticleCreateDTO, ArticleUpdateDTO, ArticleSortDTO, ArticleMoveDTO } from '@/types';
 
 export const getArticle = (articleCode: string) => client.get<ArticleVO>(`/articles/${articleCode}`);
 
@@ -14,6 +14,8 @@ export const offlineArticle = (articleCode: string) => client.put(`/articles/${a
 export const deleteArticle = (articleCode: string) => client.delete(`/articles/${articleCode}`);
 
 export const updateArticleSort = (data: ArticleSortDTO) => client.put('/articles/sort', data);
+
+export const moveArticle = (data: ArticleMoveDTO) => client.put('/articles/move', data);
 
 export const importPdf = (
   file: File,

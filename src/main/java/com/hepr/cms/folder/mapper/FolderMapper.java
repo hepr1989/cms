@@ -23,5 +23,7 @@ public interface FolderMapper extends BaseMapper<Folder> {
                          @Param("thresholdSort") int thresholdSort,
                          @Param("excludeCode") String excludeCode);
 
+    Integer getMaxSort(@Param("parentFolderCode") String parentFolderCode);
+
     void updateSortByCode(@Param("folderCode") String folderCode, @Param("sort") int sort);
 }

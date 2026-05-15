@@ -87,6 +87,38 @@ function removeNodeFromList(nodes: TreeDataNode[], key: string): TreeDataNode[] 
     .map(n => n.children ? { ...n, children: removeNodeFromList(n.children, key) } : n);
 }
 
+/** 递归收集所有后代目录 key */
+function collectDescendantFolderKeys(nodes: TreeDataNode[]): string[] {
+  const result: string[] = [];
+  for (const node of nodes) {
+    if (node.type === 'folder') {
+      result.push(node.key);
+    }
+    if (node.children) {
+      result.push(...collectDescendantFolderKeys(node.children));
+    }
+  }
+  return result;
+}
+
+/** 重新加载所有已展开但未加载子节点的目录，保持展开状态 */
+async function reloadExpandedFolders(get: () => TreeState) {
+  const attempted = new Set<string>();
+  let hasMore = true;
+  while (hasMore) {
+    hasMore = false;
+    const { expandedKeys, loadedKeys, treeData } = get();
+    for (const key of expandedKeys) {
+      if (loadedKeys.includes(key) || attempted.has(key)) continue;
+      if (!findNode(treeData, key)) continue;
+      attempted.add(key);
+      await get().loadChildren(key);
+      hasMore = true;
+      break;
+    }
+  }
+}
+
 /** 收集树中所有未加载的目录 key（跳过叶子节点和 __loading__ 占位） */
 function collectUnloadedFolderKeys(nodes: TreeDataNode[], loadedKeys: string[]): string[] {
   const result: string[] = [];
@@ -224,14 +256,11 @@ export const useTreeStore = create<TreeState>()(immer((set, get) => ({
       state.loadedKeys = state.loadedKeys.filter(k => k !== folderKey);
       const parentNode = findNode(state.treeData, folderKey);
       if (parentNode) {
-        // 清除子目录的 loadedKeys，因为重新加载后子目录节点会被重建（带 __loading__ 占位符）
-        // 如果不清除，展开子目录时会因 loadedKeys 命中而跳过加载，导致无法展开
+        // 收集所有后代目录 key，清理 loadedKeys（保留 expandedKeys）
+        // 刷新后通过 reloadExpandedFolders 自动重新加载已展开的子目录
         if (parentNode.children) {
-          for (const child of parentNode.children) {
-            if (child.type === 'folder') {
-              state.loadedKeys = state.loadedKeys.filter(k => k !== child.key);
-            }
-          }
+          const descendantKeys = collectDescendantFolderKeys(parentNode.children);
+          state.loadedKeys = state.loadedKeys.filter(k => !descendantKeys.includes(k));
         }
         parentNode.children = parentNode.hasChildren
           ? [{ key: '__loading__', title: '加载中...', type: 'folder', isLeaf: true, parentKey: folderKey, code: '' }]
@@ -239,13 +268,18 @@ export const useTreeStore = create<TreeState>()(immer((set, get) => ({
       }
     });
     await get().loadChildren(folderKey);
+    // 重新加载所有已展开但未加载子节点的目录，保持展开状态
+    await reloadExpandedFolders(get);
   },
 
   refreshRootNodes: async () => {
     const portalMode = get().mode === 'portal';
     const folders = await getRootFolders(portalMode) as unknown as FolderVO[];
     const nodes = folders.map(f => folderToNode(f, '-1'));
-    set({ treeData: nodes });
+    // 清除加载状态但保留展开状态，刷新后自动重新加载已展开的子目录
+    set({ treeData: nodes, loadedKeys: [] });
+    // 重新加载所有已展开但未加载子节点的目录
+    await reloadExpandedFolders(get);
   },
 
   setExpandedKeys: (keys: string[]) => {

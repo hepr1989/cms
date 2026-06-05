@@ -411,6 +411,16 @@ public class FolderSortDTO {
     @NotBlank(message = "位置不能为空")
     private String position;       // "BEFORE" 或 "AFTER"
 }
+
+// FolderMoveDTO — 跨层级移动
+public class FolderMoveDTO {
+    @NotBlank(message = "目录编码不能为空")
+    private String folderCode;
+    @NotBlank(message = "目标父目录编码不能为空")
+    private String targetParentFolderCode;
+    private String targetCode;     // 可选，为空则追加到末尾
+    private String position;       // 可选，"BEFORE" 或 "AFTER"
+}
 ```
 
 ### 4.3 VO
@@ -427,6 +437,7 @@ public class FolderVO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Integer childrenCount;  // 子目录数量
+    private Integer articleCount;   // 文章数量
 }
 
 // FolderTreeVO
@@ -441,11 +452,13 @@ public class FolderTreeVO {
 ```java
 public interface FolderService {
     List<FolderVO> getRootFolders();
+    List<FolderVO> getRootFolders(boolean portalMode);
     FolderTreeVO getChildren(String folderCode, boolean portalMode);
     FolderVO create(FolderCreateDTO dto);
     FolderVO update(FolderUpdateDTO dto);
     void delete(String folderCode);
     void updateSort(FolderSortDTO dto);
+    void moveFolder(FolderMoveDTO dto);
 
     /** 供其他聚合根调用 */
     FolderVO getByCode(String folderCode);
@@ -458,13 +471,15 @@ public interface FolderService {
 ```java
 @Mapper
 public interface FolderMapper extends BaseMapper<Folder> {
-    Map<String, Integer> countChildrenByParentCodes(@Param("parentFolderCodes") List<String> parentFolderCodes);
+    @MapKey("parentFolderCode")
+    Map<String, Map<String, Object>> countChildrenByParentCodes(@Param("parentFolderCodes") List<String> parentFolderCodes);
     void incrementSortGte(@Param("parentFolderCode") String parentFolderCode,
                           @Param("thresholdSort") int thresholdSort,
                           @Param("excludeCode") String excludeCode);
     void incrementSortGt(@Param("parentFolderCode") String parentFolderCode,
                          @Param("thresholdSort") int thresholdSort,
                          @Param("excludeCode") String excludeCode);
+    Integer getMaxSort(@Param("parentFolderCode") String parentFolderCode);
     void updateSortByCode(@Param("folderCode") String folderCode, @Param("sort") int sort);
 }
 ```
@@ -507,6 +522,11 @@ public interface FolderMapper extends BaseMapper<Folder> {
         UPDATE cms_folder SET sort = #{sort}
         WHERE folder_code = #{folderCode} AND del_flag = 0
     </update>
+
+    <select id="getMaxSort" resultType="java.lang.Integer">
+        SELECT MAX(sort) FROM cms_folder
+        WHERE parent_folder_code = #{parentFolderCode} AND del_flag = 0
+    </select>
 </mapper>
 ```
 
@@ -514,12 +534,13 @@ public interface FolderMapper extends BaseMapper<Folder> {
 
 | 方法 | 核心逻辑 |
 |------|---------|
-| getRootFolders | LambdaQueryWrapper 查 parentFolderCode='-1' AND status=1, sort ASC → countChildrenByParentCodes 一次查所有子目录数量 → 填充 childrenCount |
-| getChildren | 查子目录 + 一次 GROUP BY 查 childrenCount → ArticleService.listByFolderCode 查文章 → 组装 FolderTreeVO |
+| getRootFolders | LambdaQueryWrapper 查 parentFolderCode='-1' AND status=1, sort ASC → countChildrenByParentCodes 一次查所有子目录数量 → countByFolderCodes 查文章数量 → 填充 childrenCount 和 articleCount |
+| getChildren | 查子目录 + 一次 GROUP BY 查 childrenCount 和 articleCount → ArticleService.listByFolderCode 查文章 → 组装 FolderTreeVO |
 | create | IdWorker.getIdStr() 生成 folderCode → 校验父目录存在 → sort = 同级最大sort+1 → INSERT |
 | update | 根据 folderCode 查询 → 更新 title/description/status → 不允许修改 parentFolderCode |
 | delete | 查询目录 → 检查子目录和文章 → 非空则抛异常 → 逻辑删除 |
 | updateSort | 查询 moving 和 target → 校验同一层级 → BEFORE: incrementSortGte + updateSortByCode / AFTER: incrementSortGt + updateSortByCode |
+| moveFolder | 查询目录 → 校验不能移动到自身/子目录 → 如果提供 targetCode+position 则定位，否则追加到末尾（getMaxSort） → 更新 parentFolderCode 和 sort |
 
 ### 4.8 FolderController
 
@@ -529,7 +550,11 @@ public interface FolderMapper extends BaseMapper<Folder> {
 @RequiredArgsConstructor
 public class FolderController {
     @GetMapping("/root")
-    public Result<List<FolderVO>> getRootFolders();
+    public Result<List<FolderVO>> getRootFolders(
+            @RequestParam(defaultValue = "false") boolean portalMode);
+
+    @GetMapping("/{folderCode}")
+    public Result<FolderVO> getFolder(@PathVariable String folderCode);
 
     @GetMapping("/{folderCode}/children")
     public Result<FolderTreeVO> getChildren(@PathVariable String folderCode,
@@ -546,6 +571,9 @@ public class FolderController {
 
     @PutMapping("/sort")
     public Result<Void> updateSort(@Validated @RequestBody FolderSortDTO dto);
+
+    @PutMapping("/move")
+    public Result<Void> moveFolder(@Validated @RequestBody FolderMoveDTO dto);
 }
 ```
 
@@ -618,6 +646,16 @@ public class ArticleSortDTO {
     @NotBlank(message = "位置不能为空")
     private String position;       // "BEFORE" 或 "AFTER"
 }
+
+// ArticleMoveDTO — 跨目录移动
+public class ArticleMoveDTO {
+    @NotBlank(message = "文章编码不能为空")
+    private String articleCode;
+    @NotBlank(message = "目标目录编码不能为空")
+    private String targetFolderCode;
+    private String targetCode;     // 可选，为空则追加到末尾
+    private String position;       // 可选，"BEFORE" 或 "AFTER"
+}
 ```
 
 ### 5.4 VO
@@ -643,15 +681,18 @@ public class ArticleVO {
 public interface ArticleService {
     ArticleVO getDetail(String articleCode);
     ArticleVO create(ArticleCreateDTO dto);
+    ArticleVO importPdf(MultipartFile file, String folderCode);
     ArticleVO update(ArticleUpdateDTO dto);
     void publish(String articleCode);
     void offline(String articleCode);
     void delete(String articleCode);
     void updateSort(ArticleSortDTO dto);
+    void moveArticle(ArticleMoveDTO dto);
 
     /** 供其他聚合根调用 */
     List<ArticleVO> listByFolderCode(String folderCode, boolean portalMode);
     long countByFolderCode(String folderCode);
+    Map<String, Integer> countByFolderCodes(List<String> folderCodes, boolean publishedOnly);
     List<SearchResultVO> search(String keyword, boolean portalMode);
 }
 ```
@@ -668,6 +709,10 @@ public interface ArticleMapper extends BaseMapper<Article> {
                          @Param("thresholdSort") int thresholdSort,
                          @Param("excludeCode") String excludeCode);
     void updateSortByCode(@Param("articleCode") String articleCode, @Param("sort") int sort);
+    Integer getMaxSort(@Param("folderCode") String folderCode);
+    @MapKey("folderCode")
+    Map<String, Map<String, Object>> countByFolderCodes(@Param("folderCodes") List<String> folderCodes,
+                                                         @Param("publishedOnly") boolean publishedOnly);
 }
 ```
 
@@ -698,6 +743,25 @@ public interface ArticleMapper extends BaseMapper<Article> {
         UPDATE cms_article SET sort = #{sort}
         WHERE article_code = #{articleCode} AND del_flag = 0
     </update>
+
+    <select id="getMaxSort" resultType="java.lang.Integer">
+        SELECT MAX(sort) FROM cms_article
+        WHERE folder_code = #{folderCode} AND del_flag = 0
+    </select>
+
+    <select id="countByFolderCodes" resultType="java.util.HashMap">
+        SELECT folder_code AS folderCode, COUNT(*) AS cnt
+        FROM cms_article
+        WHERE del_flag = 0
+          AND folder_code IN
+          <foreach collection="folderCodes" item="code" open="(" separator="," close=")">
+              #{code}
+          </foreach>
+          <if test="publishedOnly">
+              AND status = 'PUBLISHED'
+          </if>
+        GROUP BY folder_code
+    </select>
 </mapper>
 ```
 
@@ -712,6 +776,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
 | offline | 查询 → canTransitionTo(OFFLINE) 校验 → status=OFFLINE |
 | delete | 查询 → 逻辑删除 → 逻辑删除关联的 AttachmentRef |
 | updateSort | 同 FolderServiceImpl.updateSort |
+| moveArticle | 查询文章 → 校验目标目录存在 → 如果提供 targetCode+position 则定位，否则追加到末尾（getMaxSort） → 更新 folderCode 和 sort |
 | listByFolderCode | LambdaQueryWrapper + portalMode 过滤 + sort ASC |
 | search | 关键词 ≥ 2 字符 → LIKE 匹配 title 和 contentMd → 生成 contentSnippet → 填充 folderTitle |
 
@@ -747,9 +812,11 @@ public class AttachmentRef extends BaseEntity {
 ```java
 public interface StorageService {
     String store(MultipartFile file, String storageKey);
+    String store(InputStream inputStream, long size, String contentType, String storageKey);
     Resource load(String storageKey);
     void delete(String storageKey);
     String getUrl(String storageKey);
+    String getStorageType();
 }
 ```
 
@@ -785,7 +852,9 @@ public class MinioConfig {
 ```java
 public interface AttachmentService {
     AttachmentVO upload(MultipartFile file, String refType, String refCode);
+    AttachmentVO uploadFromBytes(byte[] data, String fileName, String contentType, String refType, String refCode);
     AttachmentVO getByCode(String attachmentCode);
+    Resource loadResource(String attachmentCode);
     void delete(String attachmentCode);
     List<AttachmentVO> getByRef(String refType, String refCode);
 }
@@ -795,10 +864,12 @@ public interface AttachmentService {
 
 | 方法 | 核心逻辑 |
 |------|---------|
-| upload | 校验文件 ≤ 10MB → 生成 storageKey = yyyy-MM/{uuid}.{ext} → storageService.store() → IdWorker.getIdStr() 生成 attachmentCode → INSERT cms_attachment → 如果有 refType+refCode 则 INSERT cms_attachment_ref |
-| getByCode | 根据 attachmentCode 查询 → 不存在抛 404 |
+| upload | 校验文件 ≤ 10MB → 生成 storageKey = yyyy-MM/{uuid}.{ext} → storageService.store() → IdWorker.getIdStr() 生成 attachmentCode → INSERT cms_attachment → 如果有 refType+refCode 则 INSERT cms_attachment_ref → 填充 downloadUrl |
+| uploadFromBytes | 与 upload 类似，接受 byte[] 参数，供 PDF 导入等内部服务调用 |
+| getByCode | 根据 attachmentCode 查询 → 不存在抛 404 → 填充 downloadUrl |
+| loadResource | 根据 attachmentCode 查询 → storageService.load() 返回 Resource 对象，供下载接口使用 |
 | delete | 查询 → storageService.delete() 删除物理文件 → 逻辑删除 cms_attachment → 逻辑删除 cms_attachment_ref |
-| getByRef | 查 cms_attachment_ref 获取 attachmentCode 列表 → 批量查 cms_attachment |
+| getByRef | 查 cms_attachment_ref 获取 attachmentCode 列表 → 批量查 cms_attachment → 填充 downloadUrl |
 
 ### 6.8 AttachmentController
 
@@ -821,8 +892,41 @@ public class AttachmentController {
     @GetMapping("/query")
     public Result<List<AttachmentVO>> getByRef(@RequestParam String refType,
                                                 @RequestParam String refCode);
+
+    @GetMapping("/{attachmentCode}/download")
+    public ResponseEntity<Resource> download(@PathVariable String attachmentCode);
 }
 ```
+
+### 6.9 PdfImportService
+
+```java
+public interface PdfImportService {
+    PdfImportResult convertToMarkdown(MultipartFile pdfFile, String articleCode);
+}
+```
+
+**PdfImportResult**:
+
+```java
+@Data
+public class PdfImportResult {
+    private String title;      // 提取的文章标题
+    private String markdown;   // 转换后的 Markdown 内容
+}
+```
+
+**PdfImportServiceImpl 实现逻辑**:
+
+| 方法 | 核心逻辑 |
+|------|--------|
+| convertToMarkdown | 使用 PDFBox 加载 PDF → extractTitle() 提取标题 → 逐页提取文本和图片 → 提取内嵌图片并存储为附件（通过 AttachmentService.uploadFromBytes） → 在 Markdown 中插入图片引用 → 返回 PdfImportResult |
+
+**图片提取规则**:
+- 过滤尺寸小于 30px 的图片（图标噪音）
+- 过滤尺寸小于 50px 的图片（小图标）
+- 最多提取 50 张图片
+- 图片通过 AttachmentService.uploadFromBytes 存储，关联到文章
 
 ## 7. 搜索模块
 

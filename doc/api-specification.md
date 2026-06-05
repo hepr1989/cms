@@ -31,6 +31,12 @@
 GET /api/folders/root
 ```
 
+**查询参数**:
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| portalMode | boolean | 否 | false | true=前台模式（仅返回PUBLISHED文章计数） |
+
 **请求参数**: 无
 
 **响应** `Result<List<FolderVO>>`:
@@ -48,6 +54,7 @@ GET /api/folders/root
       "description": "技术相关文档",
       "sort": 0,
       "childrenCount": 3,
+      "articleCount": 5,
       "createdAt": "2026-04-28 10:00:00",
       "updatedAt": "2026-04-28 10:00:00"
     }
@@ -55,7 +62,7 @@ GET /api/folders/root
 }
 ```
 
-**说明**: 仅返回 `parentFolderCode = '-1'` 且 `status = 1` 的根级目录，按 sort ASC 排序。`childrenCount` 为子目录数量（不含文章），用于前端判断树节点是否显示展开箭头。
+**说明**: 仅返回 `parentFolderCode = '-1'` 且 `status = 1` 的根级目录，按 sort ASC 排序。`childrenCount` 为子目录数量（不含文章），`articleCount` 为该目录下文章数量，用于前端判断树节点是否显示展开箭头。
 
 ---
 
@@ -93,6 +100,7 @@ GET /api/folders/{folderCode}/children
         "description": "",
         "sort": 0,
         "childrenCount": 2,
+        "articleCount": 3,
         "createdAt": "2026-04-28 10:05:00",
         "updatedAt": "2026-04-28 10:05:00"
       }
@@ -119,7 +127,25 @@ GET /api/folders/{folderCode}/children
 
 ---
 
-### 2.3 新增目录
+### 2.3 获取目录详情
+
+```
+GET /api/folders/{folderCode}
+```
+
+**路径参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| folderCode | string | 是 | 目录编码 |
+
+**响应** `Result<FolderVO>`:
+
+**说明**: 根据 folderCode 查询单个目录信息，返回完整的 FolderVO（含 childrenCount 和 articleCount）。
+
+---
+
+### 2.4 新增目录
 
 ```
 POST /api/folders
@@ -175,7 +201,7 @@ POST /api/folders
 
 ---
 
-### 2.4 修改目录
+### 2.5 修改目录
 
 ```
 PUT /api/folders
@@ -231,7 +257,7 @@ PUT /api/folders
 
 ---
 
-### 2.5 删除目录
+### 2.6 删除目录
 
 ```
 DELETE /api/folders/{folderCode}
@@ -265,7 +291,7 @@ DELETE /api/folders/{folderCode}
 
 ---
 
-### 2.6 目录拖拽排序
+### 2.7 目录拖拽排序
 
 ```
 PUT /api/folders/sort
@@ -307,6 +333,47 @@ PUT /api/folders/sort
 | 400 | 只能在同一层级内排序 | 两个目录不在同一父目录下 |
 
 **说明**: 排序通过 SQL 实现（incrementSortGte/Gt + updateSortByCode，共2条UPDATE），不在 Java 中操作列表。
+
+---
+
+### 2.8 移动目录
+
+```
+PUT /api/folders/move
+```
+
+**请求体** `FolderMoveDTO` (JSON):
+
+| 字段 | 类型 | 必填 | 校验 | 说明 |
+|------|------|------|------|------|
+| folderCode | string | 是 | @NotBlank | 被移动的目录编码 |
+| targetParentFolderCode | string | 是 | @NotBlank | 目标父目录编码，"-1"表示移动到根级 |
+| targetCode | string | 否 | — | 目标位置参考目录编码，为空则追加到末尾 |
+| position | string | 否 | — | 位置："BEFORE"/"AFTER"，仅在 targetCode 存在时有效 |
+
+**请求示例**:
+
+```json
+{
+  "folderCode": "1893274912999",
+  "targetParentFolderCode": "1893274912345",
+  "targetCode": "1893274912346",
+  "position": "BEFORE"
+}
+```
+
+**响应** `Result<Void>`
+
+**错误场景**:
+
+| code | message | 触发条件 |
+|------|---------|----------|
+| 404 | 目录不存在 | folderCode 对应的目录不存在 |
+| 400 | 不能移动到自身目录下 | folderCode 与 targetParentFolderCode 相同 |
+| 400 | 不能移动到自身子目录下 | targetParentFolderCode 是 folderCode 的后代目录 |
+| 400 | 目标父目录不存在或已不可用 | targetParentFolderCode 对应的目录不存在或 status=0 |
+
+**说明**: 支持跨层级移动目录，可指定目标父目录和相对位置。防止循环引用（不能移动到自己的子目录下）。
 
 ---
 
@@ -602,6 +669,68 @@ PUT /api/articles/sort
 
 ---
 
+### 3.8 移动文章
+
+```
+PUT /api/articles/move
+```
+
+**请求体** `ArticleMoveDTO` (JSON):
+
+| 字段 | 类型 | 必填 | 校验 | 说明 |
+|------|------|------|------|------|
+| articleCode | string | 是 | @NotBlank | 被移动的文章编码 |
+| targetFolderCode | string | 是 | @NotBlank | 目标目录编码 |
+| targetCode | string | 否 | — | 目标位置参考文章编码，为空则追加到末尾 |
+| position | string | 否 | — | 位置："BEFORE"/"AFTER"，仅在 targetCode 存在时有效 |
+
+**请求示例**:
+
+```json
+{
+  "articleCode": "1893274913000",
+  "targetFolderCode": "1893274912346",
+  "targetCode": "1893274912350",
+  "position": "AFTER"
+}
+```
+
+**响应** `Result<Void>`
+
+**错误场景**:
+
+| code | message | 触发条件 |
+|------|---------|----------|
+| 404 | 文章不存在 | articleCode 对应的文章不存在 |
+| 400 | 目标目录不存在或已不可用 | targetFolderCode 对应的目录不存在或 status=0 |
+| 404 | 参考文章不存在 | targetCode 对应的文章不存在 |
+| 400 | 参考文章不在目标目录内 | targetCode 的文章不在 targetFolderCode 目录下 |
+
+**说明**: 支持跨目录移动文章，可指定目标目录和相对位置。
+
+---
+
+### 3.9 PDF 导入
+
+```
+POST /api/articles/import-pdf
+```
+
+**Content-Type**: `multipart/form-data`
+
+**请求参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| file | MultipartFile | 是 | PDF 文件 |
+| folderCode | string | 是 | 所属目录编码 |
+
+**响应** `Result<ArticleVO>`:
+
+**说明**: 上传 PDF 文件，使用 PDFBox 提取文本和图片，转换为 Markdown 格式文章。默认 status=DRAFT。图片存储为附件并在 Markdown 中引用。
+
+---
+
 ## 4. 附件模块 `/api/attachments`
 
 ### 4.1 上传文件
@@ -637,6 +766,7 @@ refCode: "1893274913000"
     "attachmentCode": "1893274914000",
     "fileName": "screenshot.png",
     "fileUrl": "/uploads/2026-04/a1b2c3d4-5678-90ab-cdef-1234567890ab.png",
+    "downloadUrl": "/api/attachments/1893274914000/download",
     "fileSize": 102400,
     "storageType": "local"
   }
@@ -650,7 +780,7 @@ refCode: "1893274913000"
 | 413 | 文件大小不能超过10MB | 文件 > 10MB |
 | 500 | 文件存储失败：... | 磁盘写入异常 |
 
-**说明**: `storageKey` 格式为 `yyyy-MM/{uuid}.{ext}`；如果同时传入 `refType` 和 `refCode`，自动创建 `cms_attachment_ref` 关联记录；`attachmentCode` 由雪花算法生成。
+**说明**: `storageKey` 格式为 `yyyy-MM/{uuid}.{ext}`；如果同时传入 `refType` 和 `refCode`，自动创建 `cms_attachment_ref` 关联记录；`attachmentCode` 由雪花算法生成。响应中包含 `downloadUrl` 字段，用于附件下载。
 
 ---
 
@@ -676,6 +806,7 @@ GET /api/attachments/{attachmentCode}
     "attachmentCode": "1893274914000",
     "fileName": "screenshot.png",
     "fileUrl": "/uploads/2026-04/a1b2c3d4.png",
+    "downloadUrl": "/api/attachments/1893274914000/download",
     "fileSize": 102400,
     "storageType": "local"
   }
@@ -690,7 +821,31 @@ GET /api/attachments/{attachmentCode}
 
 ---
 
-### 4.3 删除附件
+### 4.3 下载附件
+
+```
+GET /api/attachments/{attachmentCode}/download
+```
+
+**路径参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| attachmentCode | string | 是 | 附件编码 |
+
+**响应**: 文件流（`application/octet-stream`），`Content-Disposition` 包含 UTF-8 编码的文件名。
+
+**错误场景**:
+
+| code | message | 触发条件 |
+|------|---------|----------|
+| 404 | 附件不存在 | attachmentCode 对应的附件不存在 |
+
+**说明**: 以附件形式下载原始文件，文件名经过 URLEncoder UTF-8 编码，支持 `filename*=UTF-8''` 标准。
+
+---
+
+### 4.4 删除附件
 
 ```
 DELETE /api/attachments/{attachmentCode}
@@ -722,7 +877,7 @@ DELETE /api/attachments/{attachmentCode}
 
 ---
 
-### 4.4 按关联查询附件列表
+### 4.5 按关联查询附件列表
 
 ```
 GET /api/attachments/query
@@ -748,6 +903,7 @@ GET /api/attachments/query
       "attachmentCode": "1893274914000",
       "fileName": "screenshot.png",
       "fileUrl": "/uploads/2026-04/a1b2c3d4.png",
+      "downloadUrl": "/api/attachments/1893274914000/download",
       "fileSize": 102400,
       "storageType": "local"
     },
@@ -755,6 +911,7 @@ GET /api/attachments/query
       "attachmentCode": "1893274914001",
       "fileName": "data.xlsx",
       "fileUrl": "/uploads/2026-04/e5f6g7h8.xlsx",
+      "downloadUrl": "/api/attachments/1893274914001/download",
       "fileSize": 204800,
       "storageType": "local"
     }

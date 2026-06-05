@@ -35,12 +35,14 @@
 
 | 功能 | 说明 |
 |------|------|
-| 查看根级目录 | 获取 `parentFolderCode = '-1'` 且 `status = 1` 的根级目录列表 |
+| 查看根级目录 | 获取 `parentFolderCode = '-1'` 且 `status = 1` 的根级目录列表，支持 portalMode 过滤 |
+| 查看目录详情 | 根据 folderCode 查询单个目录信息 |
 | 懒加载子节点 | 展开目录时加载子目录和文章，支持 portalMode 过滤 |
 | 新增目录 | 雪花算法生成 folderCode，sort 自动计算，支持创建根级和子目录 |
-| 修改目录 | 修改标题、描述、状态，不允许移动目录（修改 parentFolderCode） |
+| 修改目录 | 修改标题、描述、状态，不允许修改 parentFolderCode（移动需使用移动接口） |
 | 删除目录 | 仅允许删除空目录（无子目录、无文章），逻辑删除 |
 | 拖拽排序 | 同层级内拖拽排序，movingCode + targetCode + position（BEFORE/AFTER） |
+| 移动目录 | 跨层级移动目录到指定父目录下，支持定位到参考目录的前/后方，防止循环引用 |
 
 ### 4.2 文章管理
 
@@ -53,6 +55,8 @@
 | 下线文章 | PUBLISHED → OFFLINE |
 | 删除文章 | 逻辑删除，同时删除关联的 attachment_ref 记录 |
 | 拖拽排序 | 同目录内拖拽排序，与目录排序逻辑一致 |
+| 移动文章 | 跨目录移动文章到指定目录下，支持定位到参考文章的前/后方 |
+| PDF 导入 | 上传 PDF 文件，自动提取文本和图片转换为 Markdown 格式文章，图片存储为附件 |
 
 ### 4.3 附件管理
 
@@ -60,6 +64,7 @@
 |------|------|
 | 上传文件 | 最大 10MB，本地存储路径格式 yyyy-MM/{uuid}.{ext} |
 | 查询附件 | 根据 attachmentCode 查询单个附件 |
+| 下载附件 | 根据 attachmentCode 下载附件原始文件，文件名 UTF-8 编码 |
 | 按关联查询 | 根据 refType + refCode 查询关联的附件列表 |
 | 删除附件 | 同时删除物理文件、逻辑删除 attachment 记录和关联的 attachment_ref 记录 |
 
@@ -78,6 +83,14 @@
 | 目录浏览 | 仅展示 status=1 的目录和 PUBLISHED 文章 |
 | 文章阅读 | Markdown 渲染展示，含大纲导航 |
 | 搜索 | 与管理端共用搜索接口，默认 portalMode=true |
+
+### 4.6 PDF 导入
+
+| 功能 | 说明 |
+|------|------|
+| 导入 PDF | 上传 PDF 文件，使用 PDFBox 提取文本内容转为 Markdown |
+| 图片提取 | 自动提取 PDF 内嵌图片，存储为附件并在 Markdown 中引用 |
+| 标题提取 | 从 PDF 元数据或首页文本中提取文章标题 |
 
 ## 5. 文章状态流转
 

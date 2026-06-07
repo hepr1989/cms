@@ -89,10 +89,13 @@ export default function FolderTree({ mode }: FolderTreeProps) {
   }, [selectNode, navigate, mode, treeData]);
 
   const handleExpand = useCallback((keys: React.Key[]) => {
+    const store = useTreeStore.getState();
+    const prev = store.expandedKeys;
     setExpandedKeys(keys as string[]);
-    const added = keys.find(k => !expandedKeys.includes(k as string));
+    // 使用 store 当前状态而非闭包中的旧值
+    const added = keys.find(k => !prev.includes(k as string));
     if (added) expandFolder(added as string);
-  }, [setExpandedKeys, expandFolder, expandedKeys]);
+  }, [setExpandedKeys, expandFolder]);
 
   /** 拖拽进入节点时，如果是折叠的目录，延迟自动展开 */
   const handleDragEnter = useCallback((info: any) => {
@@ -254,20 +257,15 @@ export default function FolderTree({ mode }: FolderTreeProps) {
   /** 移动后刷新所有受影响的节点 */
   const refreshAffected = async (sourceParentKey: string, targetParentKey: string) => {
     const store = useTreeStore.getState();
+    const needsRootRefresh = sourceParentKey === '-1' || targetParentKey === '-1';
     const keysToRefresh = new Set<string>();
 
-    if (sourceParentKey === '-1') {
-      await store.refreshRootNodes();
-    } else {
-      keysToRefresh.add(sourceParentKey);
-    }
+    if (sourceParentKey !== '-1') keysToRefresh.add(sourceParentKey);
+    if (targetParentKey !== '-1') keysToRefresh.add(targetParentKey);
 
-    if (targetParentKey === '-1') {
+    if (needsRootRefresh) {
       await store.refreshRootNodes();
-    } else {
-      keysToRefresh.add(targetParentKey);
     }
-
     for (const key of keysToRefresh) {
       await store.refreshChildren(key);
     }

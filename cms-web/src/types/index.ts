@@ -5,6 +5,9 @@ export type { AttachmentVO } from './attachment';
 export type { SearchResultVO } from './search';
 export type { TreeNodeType, TreeNodeKey, TreeDataNode } from './tree';
 export type { ApiResponse } from './api';
+export type { LoginDTO, LoginVO, UserVO, UserCreateDTO, UserUpdateDTO, UserPasswordDTO } from './auth';
+export type { FolderPermissionVO } from './permission';
+export type { ArticleVersionVO } from './version';
 
 // Fix circular reference in FolderTreeVO
 import type { ArticleVO } from './article';

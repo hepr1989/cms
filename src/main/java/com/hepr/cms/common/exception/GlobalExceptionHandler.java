@@ -48,6 +48,12 @@ public class GlobalExceptionHandler {
         return Result.fail(405, "请求方法不支持: " + e.getMethod());
     }
 
+    @ExceptionHandler(UnauthorizedException.class)
+    public Result<Void> handleUnauthorized(UnauthorizedException e) {
+        log.warn("未授权: {}", e.getMessage());
+        return Result.fail(401, e.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception e) {
         log.error("系统异常", e);

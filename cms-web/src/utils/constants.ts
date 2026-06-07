@@ -8,7 +8,7 @@ export const POSITION = {
 export const ARTICLE_STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   DRAFT: { color: 'warning', label: '草稿' },
   PUBLISHED: { color: 'success', label: '已发布' },
-  OFFLINE: { color: 'error', label: '已下线' },
+  OFFLINE: { color: 'default', label: '已下线' },
 };
 
 export const DEBOUNCE_DELAY = 300;

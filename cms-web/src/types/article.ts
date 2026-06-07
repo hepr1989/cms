@@ -15,6 +15,8 @@ export interface ArticleVO {
   folderTitle?: string;
   createdAt: string;
   updatedAt: string;
+  versionNumber?: number;
+  updatedBy?: string;
 }
 
 export interface ArticleCreateDTO {

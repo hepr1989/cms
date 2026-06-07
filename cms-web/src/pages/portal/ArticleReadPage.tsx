@@ -18,8 +18,11 @@ export default function ArticleReadPage() {
 
   useEffect(() => {
     if (articleCode) {
-      loadArticle(articleCode);
-      syncSelection(`article-${articleCode}`);
+      // 先加载文章获取 folderCode，再展开树路径
+      loadArticle(articleCode).then(() => {
+        const fc = useArticleStore.getState().currentArticle?.folderCode;
+        syncSelection(`article-${articleCode}`, fc);
+      });
     }
     return () => reset();
   }, [articleCode, loadArticle, reset, syncSelection]);
@@ -40,7 +43,7 @@ export default function ArticleReadPage() {
           <h1>{article.title}</h1>
         </div>
         <MarkdownRenderer content={article.contentMd || ''} />
-        <MetadataBar updatedAt={article.updatedAt} />
+        <MetadataBar updatedAt={article.updatedAt} updatedBy={article.updatedBy} />
       </div>
       {hasOutline && (
         <>

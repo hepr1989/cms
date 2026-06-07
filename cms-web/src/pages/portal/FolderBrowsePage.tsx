@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FolderOutlined, FileTextOutlined } from '@ant-design/icons';
-import { getChildren } from '@/api/folder';
+import { getChildren, getFolder } from '@/api/folder';
 import { useTreeStore } from '@/store/tree-store';
 import MetadataBar from '@/components/common/MetadataBar';
 import type { FolderVO, ArticleVO, FolderTreeVO } from '@/types';
@@ -9,11 +9,13 @@ import type { FolderVO, ArticleVO, FolderTreeVO } from '@/types';
 export default function FolderBrowsePage() {
   const { folderCode } = useParams();
   const navigate = useNavigate();
+  const [folderInfo, setFolderInfo] = useState<FolderVO | null>(null);
   const [data, setData] = useState<FolderTreeVO | null>(null);
   const syncSelection = useTreeStore(s => s.syncSelection);
 
   useEffect(() => {
     if (folderCode) {
+      getFolder(folderCode).then(f => setFolderInfo(f as unknown as FolderVO)).catch(() => {});
       getChildren(folderCode, true).then(d => setData(d as any));
       syncSelection(`folder-${folderCode}`);
     }
@@ -57,7 +59,7 @@ export default function FolderBrowsePage() {
           </div>
         </div>
       )}
-      <MetadataBar updatedAt={null} showShare={false} />
+      <MetadataBar updatedAt={folderInfo?.updatedAt || null} updatedBy={folderInfo?.updatedBy} showShare={false} />
     </div>
   );
 }

@@ -16,4 +16,6 @@ public class ArticleVO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String folderTitle;
+    private Integer versionNumber;
+    private String updatedBy;
 }

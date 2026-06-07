@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import type { TreeDataNode, FolderVO, ArticleVO } from '@/types';
-import { getRootFolders, getChildren } from '@/api/folder';
+import { getRootFolders, getChildren, getAllFoldersFlat } from '@/api/folder';
 
 type TreeMode = 'admin' | 'portal';
 
@@ -26,7 +26,7 @@ interface TreeState {
   refreshChildren: (folderKey: string) => Promise<void>;
   refreshRootNodes: () => Promise<void>;
   setExpandedKeys: (keys: string[]) => void;
-  syncSelection: (key: string) => Promise<void>;
+  syncSelection: (key: string, folderCode?: string) => Promise<void>;
 }
 
 function folderToNode(f: FolderVO, parentKey: string): TreeDataNode {
@@ -287,7 +287,7 @@ export const useTreeStore = create<TreeState>()(immer((set, get) => ({
   },
 
   /** 根据目标 key 自动展开父级路径并选中该节点 */
-  syncSelection: async (key: string) => {
+  syncSelection: async (key: string, folderCode?: string) => {
     if (get().selectedKey === key) return;
 
     // 确保根节点已加载
@@ -295,28 +295,65 @@ export const useTreeStore = create<TreeState>()(immer((set, get) => ({
       await get().loadRootNodes();
     }
 
-    // 搜索阶段：只加载数据不展开目录，避免展开无关层级
+    // 先检查目标是否已在树中可见
     let path = findPathToNode(get().treeData, key);
-    let maxRounds = 5;
 
-    while (!path && maxRounds > 0) {
-      const unloaded = collectUnloadedFolderKeys(get().treeData, get().loadedKeys);
-      if (unloaded.length === 0) break;
-
-      // 仅加载数据，不加入 expandedKeys
-      for (const fk of unloaded) {
-        if (!get().loadedKeys.includes(fk)) {
-          await get().loadChildren(fk);
+    if (!path) {
+      // 用 getAllFoldersFlat 一次获取所有栏目，在内存中计算父链
+      try {
+        const allFolders = await getAllFoldersFlat() as unknown as FolderVO[];
+        const folderMap = new Map<string, FolderVO>();
+        for (const f of allFolders) {
+          folderMap.set(f.folderCode, f);
         }
-        path = findPathToNode(get().treeData, key);
-        if (path) break;
+
+        // 确定目标所在栏目
+        let targetFolderCode: string | null = null;
+        if (key.startsWith('folder-')) {
+          targetFolderCode = key.replace('folder-', '');
+        } else if (key.startsWith('article-')) {
+          // 优先用调用者传入的 folderCode（F5 刷新时文章节点不在树中）
+          if (folderCode) {
+            targetFolderCode = folderCode;
+          } else {
+            const articleNode = findNode(get().treeData, key);
+            if (articleNode?.parentKey && articleNode.parentKey.startsWith('folder-')) {
+              targetFolderCode = articleNode.parentKey.replace('folder-', '');
+            }
+          }
+        }
+
+        if (targetFolderCode && folderMap.has(targetFolderCode)) {
+          // 通过 parentFolderCode 向上走，构建从根到目标的路径
+          const pathFolderCodes: string[] = [];
+          let current = targetFolderCode;
+          const visited = new Set<string>();
+          while (current && current !== '-1' && !visited.has(current)) {
+            visited.add(current);
+            pathFolderCodes.unshift(current);
+            const folder = folderMap.get(current);
+            current = folder?.parentFolderCode ?? '-1';
+          }
+
+          // 只加载路径上的栏目子节点（而非全树）
+          for (const code of pathFolderCodes) {
+            const folderKey = `folder-${code}`;
+            if (!get().loadedKeys.includes(folderKey)) {
+              await get().loadChildren(folderKey);
+            }
+          }
+        }
+      } catch {
+        // 获取栏目列表失败，忽略
       }
-      maxRounds--;
+
+      // 重新查找路径
+      path = findPathToNode(get().treeData, key);
     }
 
     if (!path) return;
 
-    // 只展开路径上的目录
+    // 展开路径上的所有目录
     for (const folderKey of path) {
       if (!get().expandedKeys.includes(folderKey)) {
         set(state => { state.expandedKeys.push(folderKey); });

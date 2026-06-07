@@ -8,15 +8,20 @@ import com.hepr.cms.article.dto.ArticleMoveDTO;
 import com.hepr.cms.article.dto.ArticleSortDTO;
 import com.hepr.cms.article.dto.ArticleUpdateDTO;
 import com.hepr.cms.article.entity.Article;
+import com.hepr.cms.article.entity.ArticleVersion;
 import com.hepr.cms.article.enums.ArticleStatus;
 import com.hepr.cms.article.mapper.ArticleMapper;
+import com.hepr.cms.article.mapper.ArticleVersionMapper;
 import com.hepr.cms.article.service.ArticleService;
 import com.hepr.cms.article.service.pdfimport.PdfImportResult;
 import com.hepr.cms.article.service.pdfimport.PdfImportService;
 import com.hepr.cms.article.vo.ArticleVO;
+import com.hepr.cms.article.vo.ArticleVersionVO;
 import com.hepr.cms.attachment.entity.AttachmentRef;
 import com.hepr.cms.attachment.mapper.AttachmentRefMapper;
 import com.hepr.cms.common.exception.BusinessException;
+import com.hepr.cms.common.security.PermissionService;
+import com.hepr.cms.common.security.UserContext;
 import com.hepr.cms.folder.service.FolderService;
 import com.hepr.cms.folder.vo.FolderVO;
 import com.hepr.cms.search.vo.SearchResultVO;
@@ -39,8 +44,10 @@ import java.util.stream.Collectors;
 public class ArticleServiceImpl implements ArticleService {
 
     private final ArticleMapper articleMapper;
+    private final ArticleVersionMapper articleVersionMapper;
     private final AttachmentRefMapper attachmentRefMapper;
     private final PdfImportService pdfImportService;
+    private final PermissionService permissionService;
     @Lazy
     private final FolderService folderService;
 
@@ -62,12 +69,14 @@ public class ArticleServiceImpl implements ArticleService {
         if (!folderService.existsAndActive(dto.getFolderCode())) {
             throw new BusinessException(400, "所属目录不存在或已不可用");
         }
+        checkEditPermission(dto.getFolderCode());
 
         Article article = new Article();
         article.setArticleCode(IdWorker.getIdStr());
         article.setTitle(dto.getTitle());
         article.setContentMd(dto.getContentMd());
         article.setFolderCode(dto.getFolderCode());
+        article.setVersionNumber(1);
 
         Article maxSortArticle = articleMapper.selectOne(
                 new LambdaQueryWrapper<Article>()
@@ -88,8 +97,8 @@ public class ArticleServiceImpl implements ArticleService {
         if (!folderService.existsAndActive(folderCode)) {
             throw new BusinessException(400, "所属目录不存在或已不可用");
         }
+        checkEditPermission(folderCode);
 
-        // 校验文件为 PDF
         String contentType = file.getContentType();
         String originalFilename = file.getOriginalFilename();
         if ((contentType == null || !contentType.contains("pdf"))
@@ -97,12 +106,12 @@ public class ArticleServiceImpl implements ArticleService {
             throw new BusinessException(400, "仅支持导入 PDF 文件");
         }
 
-        // 先创建空文章以获得 articleCode
         Article article = new Article();
         article.setArticleCode(IdWorker.getIdStr());
         article.setTitle("导入中...");
         article.setContentMd("");
         article.setFolderCode(folderCode);
+        article.setVersionNumber(1);
 
         Article maxSortArticle = articleMapper.selectOne(
                 new LambdaQueryWrapper<Article>()
@@ -115,10 +124,8 @@ public class ArticleServiceImpl implements ArticleService {
 
         articleMapper.insert(article);
 
-        // 解析 PDF 转换为 Markdown
         PdfImportResult importResult = pdfImportService.convertToMarkdown(file, article.getArticleCode());
 
-        // 更新文章内容
         article.setTitle(importResult.getTitle());
         article.setContentMd(importResult.getMarkdown());
         articleMapper.updateById(article);
@@ -133,13 +140,20 @@ public class ArticleServiceImpl implements ArticleService {
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, dto.getArticleCode()));
         if (article == null) throw new BusinessException(404, "文章不存在");
 
+        checkEditPermission(article.getFolderCode());
+
         if (!article.getFolderCode().equals(dto.getFolderCode())) {
             if (!folderService.existsAndActive(dto.getFolderCode())) {
                 throw new BusinessException(400, "所属目录不存在或已不可用");
             }
         }
 
-        if (ArticleStatus.PUBLISHED.name().equals(article.getStatus())) {
+        String currentStatus = article.getStatus();
+
+        // If article is NOT in DRAFT status, archive current version before updating
+        if (!ArticleStatus.DRAFT.name().equals(currentStatus)) {
+            archiveVersion(article);
+            article.setVersionNumber((article.getVersionNumber() != null ? article.getVersionNumber() : 1) + 1);
             article.setStatus(ArticleStatus.DRAFT.name());
             article.setPublishedAt(null);
         }
@@ -158,6 +172,8 @@ public class ArticleServiceImpl implements ArticleService {
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, articleCode));
         if (article == null) throw new BusinessException(404, "文章不存在");
 
+        checkEditPermission(article.getFolderCode());
+
         ArticleStatus current = ArticleStatus.valueOf(article.getStatus());
         if (!current.canTransitionTo(ArticleStatus.PUBLISHED)) {
             throw new BusinessException(400, "当前状态不允许发布，状态：" + current);
@@ -174,6 +190,8 @@ public class ArticleServiceImpl implements ArticleService {
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, articleCode));
         if (article == null) throw new BusinessException(404, "文章不存在");
 
+        checkEditPermission(article.getFolderCode());
+
         ArticleStatus current = ArticleStatus.valueOf(article.getStatus());
         if (!current.canTransitionTo(ArticleStatus.OFFLINE)) {
             throw new BusinessException(400, "当前状态不允许下线，状态：" + current);
@@ -189,7 +207,14 @@ public class ArticleServiceImpl implements ArticleService {
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, articleCode));
         if (article == null) throw new BusinessException(404, "文章不存在");
 
+        checkEditPermission(article.getFolderCode());
+
         articleMapper.deleteById(article.getId());
+
+        // Also delete version history
+        articleVersionMapper.delete(
+                new LambdaQueryWrapper<ArticleVersion>()
+                        .eq(ArticleVersion::getArticleCode, articleCode));
 
         attachmentRefMapper.delete(
                 new LambdaQueryWrapper<AttachmentRef>()
@@ -230,7 +255,6 @@ public class ArticleServiceImpl implements ArticleService {
             throw new BusinessException(400, "目标目录不存在或已不可用");
         }
 
-        // 如果提供了 targetCode 和 position，则定位到目标文章的相对位置
         if (dto.getTargetCode() != null && dto.getPosition() != null) {
             Article target = articleMapper.selectOne(
                     new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, dto.getTargetCode()));
@@ -248,7 +272,6 @@ public class ArticleServiceImpl implements ArticleService {
                 article.setSort(target.getSort() + 1);
             }
         } else {
-            // 追加到末尾
             Integer maxSort = articleMapper.getMaxSort(dto.getTargetFolderCode());
             article.setFolderCode(dto.getTargetFolderCode());
             article.setSort(maxSort != null ? maxSort + 1 : 0);
@@ -307,14 +330,20 @@ public class ArticleServiceImpl implements ArticleService {
 
         Map<String, String> folderTitleMap = new HashMap<>();
         if (!articles.isEmpty()) {
+            // 一次查询所有栏目，内存中构建 folderCode → title 映射
+            List<FolderVO> allFolders = folderService.getAllFoldersFlat();
+            Map<String, String> allFolderMap = new HashMap<>();
+            for (FolderVO f : allFolders) {
+                allFolderMap.put(f.getFolderCode(), f.getTitle());
+            }
             List<String> folderCodes = articles.stream()
                     .map(Article::getFolderCode)
                     .distinct()
                     .collect(Collectors.toList());
             for (String code : folderCodes) {
-                FolderVO folderVO = folderService.getByCode(code);
-                if (folderVO != null) {
-                    folderTitleMap.put(code, folderVO.getTitle());
+                String title = allFolderMap.get(code);
+                if (title != null) {
+                    folderTitleMap.put(code, title);
                 }
             }
         }
@@ -340,5 +369,62 @@ public class ArticleServiceImpl implements ArticleService {
             vo.setFolderTitle(folderTitleMap.get(a.getFolderCode()));
             return vo;
         }).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<ArticleVersionVO> getVersions(String articleCode) {
+        List<ArticleVersion> versions = articleVersionMapper.selectList(
+                new LambdaQueryWrapper<ArticleVersion>()
+                        .eq(ArticleVersion::getArticleCode, articleCode)
+                        .orderByDesc(ArticleVersion::getVersionNumber));
+        return versions.stream().map(v -> {
+            ArticleVersionVO vo = new ArticleVersionVO();
+            vo.setVersionNumber(v.getVersionNumber());
+            vo.setStatus(v.getStatus());
+            vo.setContentMd(v.getContentMd());
+            vo.setTitle(v.getTitle());
+            vo.setCreatedBy(v.getCreatedBy());
+            vo.setCreatedAt(v.getCreatedAt());
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    public ArticleVersionVO getVersionDetail(String articleCode, int versionNumber) {
+        ArticleVersion version = articleVersionMapper.selectOne(
+                new LambdaQueryWrapper<ArticleVersion>()
+                        .eq(ArticleVersion::getArticleCode, articleCode)
+                        .eq(ArticleVersion::getVersionNumber, versionNumber));
+        if (version == null) throw new BusinessException(404, "版本不存在");
+
+        ArticleVersionVO vo = new ArticleVersionVO();
+        vo.setVersionNumber(version.getVersionNumber());
+        vo.setStatus(version.getStatus());
+        vo.setContentMd(version.getContentMd());
+        vo.setTitle(version.getTitle());
+        vo.setCreatedBy(version.getCreatedBy());
+        vo.setCreatedAt(version.getCreatedAt());
+        return vo;
+    }
+
+    /** Archive current article state to version history */
+    private void archiveVersion(Article article) {
+        ArticleVersion version = new ArticleVersion();
+        version.setArticleCode(article.getArticleCode());
+        version.setTitle(article.getTitle());
+        version.setContentMd(article.getContentMd());
+        version.setStatus(article.getStatus());
+        version.setVersionNumber(article.getVersionNumber() != null ? article.getVersionNumber() : 1);
+        version.setPublishedAt(article.getPublishedAt());
+        articleVersionMapper.insert(version);
+    }
+
+    /** Check if current user has edit permission on the folder */
+    private void checkEditPermission(String folderCode) {
+        String username = UserContext.getUsername();
+        if (username == null) return; // allow for system/internal calls
+        if (!permissionService.canEditFolder(username, folderCode)) {
+            throw new BusinessException(403, "无编辑权限");
+        }
     }
 }

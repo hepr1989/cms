@@ -1,6 +1,8 @@
 import client from './client';
 import type { FolderVO, FolderTreeVO, FolderCreateDTO, FolderUpdateDTO, FolderSortDTO, FolderMoveDTO } from '@/types';
 
+export const getAllFoldersFlat = () => client.get<FolderVO[]>('/folders/all');
+
 export const getRootFolders = (portalMode = false) =>
   client.get<FolderVO[]>('/folders/root', { params: { portalMode } });
 

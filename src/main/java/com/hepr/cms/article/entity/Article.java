@@ -18,4 +18,5 @@ public class Article extends BaseEntity {
     private String status;
     private LocalDateTime publishedAt;
     private Integer sort;
+    private Integer versionNumber;
 }

@@ -12,6 +12,7 @@ public class Folder extends BaseEntity {
     private String title;
     private String folderCode;
     private String parentFolderCode;
+    private String rootFolderCode;
     private Integer status;
     private String description;
     private Integer sort;

@@ -5,6 +5,7 @@ import com.hepr.cms.article.dto.ArticleMoveDTO;
 import com.hepr.cms.article.dto.ArticleSortDTO;
 import com.hepr.cms.article.dto.ArticleUpdateDTO;
 import com.hepr.cms.article.vo.ArticleVO;
+import com.hepr.cms.article.vo.ArticleVersionVO;
 import com.hepr.cms.search.vo.SearchResultVO;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -26,4 +27,7 @@ public interface ArticleService {
     long countByFolderCode(String folderCode);
     Map<String, Integer> countByFolderCodes(List<String> folderCodes, boolean publishedOnly);
     List<SearchResultVO> search(String keyword, boolean portalMode);
+
+    List<ArticleVersionVO> getVersions(String articleCode);
+    ArticleVersionVO getVersionDetail(String articleCode, int versionNumber);
 }

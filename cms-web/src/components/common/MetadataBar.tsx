@@ -3,16 +3,20 @@ import { ShareAltOutlined, PlusOutlined } from '@ant-design/icons';
 
 interface Props {
   updatedAt: string | null;
+  updatedBy?: string | null;
   showShare?: boolean;
   showAdd?: boolean;
   onAddFolder?: () => void;
   onAddArticle?: () => void;
 }
 
-export default function MetadataBar({ updatedAt, showShare = true, showAdd = false, onAddFolder, onAddArticle }: Props) {
+export default function MetadataBar({ updatedAt, updatedBy, showShare = true, showAdd = false, onAddFolder, onAddArticle }: Props) {
   return (
     <div className="metadata-bar">
-      <span className="meta-time">最近修改: {updatedAt || '-'}</span>
+      <span className="meta-time">
+        最近修改: {updatedAt || '-'}
+        {updatedBy && <span style={{ marginLeft: 12 }}>修改人: {updatedBy}</span>}
+      </span>
       <div className="meta-actions">
         {showAdd && (
           <>

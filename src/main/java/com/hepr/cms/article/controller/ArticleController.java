@@ -6,11 +6,14 @@ import com.hepr.cms.article.dto.ArticleSortDTO;
 import com.hepr.cms.article.dto.ArticleUpdateDTO;
 import com.hepr.cms.article.service.ArticleService;
 import com.hepr.cms.article.vo.ArticleVO;
+import com.hepr.cms.article.vo.ArticleVersionVO;
 import com.hepr.cms.common.model.Result;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/articles")
@@ -69,5 +72,16 @@ public class ArticleController {
     public Result<Void> moveArticle(@Validated @RequestBody ArticleMoveDTO dto) {
         articleService.moveArticle(dto);
         return Result.ok();
+    }
+
+    @GetMapping("/{articleCode}/versions")
+    public Result<List<ArticleVersionVO>> getVersions(@PathVariable String articleCode) {
+        return Result.ok(articleService.getVersions(articleCode));
+    }
+
+    @GetMapping("/{articleCode}/versions/{versionNumber}")
+    public Result<ArticleVersionVO> getVersionDetail(@PathVariable String articleCode,
+                                                     @PathVariable int versionNumber) {
+        return Result.ok(articleService.getVersionDetail(articleCode, versionNumber));
     }
 }

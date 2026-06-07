@@ -1,6 +1,8 @@
 package com.hepr.cms.folder.controller;
 
+import com.hepr.cms.common.exception.BusinessException;
 import com.hepr.cms.common.model.Result;
+import com.hepr.cms.common.security.UserContext;
 import com.hepr.cms.folder.dto.FolderCreateDTO;
 import com.hepr.cms.folder.dto.FolderMoveDTO;
 import com.hepr.cms.folder.dto.FolderSortDTO;
@@ -20,6 +22,11 @@ import java.util.List;
 public class FolderController {
 
     private final FolderService folderService;
+
+    @GetMapping("/all")
+    public Result<List<FolderVO>> getAllFoldersFlat() {
+        return Result.ok(folderService.getAllFoldersFlat());
+    }
 
     @GetMapping("/root")
     public Result<List<FolderVO>> getRootFolders(
@@ -41,29 +48,40 @@ public class FolderController {
 
     @PostMapping
     public Result<FolderVO> create(@Validated @RequestBody FolderCreateDTO dto) {
+        requireAdmin();
         return Result.ok(folderService.create(dto));
     }
 
     @PutMapping
     public Result<FolderVO> update(@Validated @RequestBody FolderUpdateDTO dto) {
+        requireAdmin();
         return Result.ok(folderService.update(dto));
     }
 
     @DeleteMapping("/{folderCode}")
     public Result<Void> delete(@PathVariable String folderCode) {
+        requireAdmin();
         folderService.delete(folderCode);
         return Result.ok();
     }
 
     @PutMapping("/sort")
     public Result<Void> updateSort(@Validated @RequestBody FolderSortDTO dto) {
+        requireAdmin();
         folderService.updateSort(dto);
         return Result.ok();
     }
 
     @PutMapping("/move")
     public Result<Void> moveFolder(@Validated @RequestBody FolderMoveDTO dto) {
+        requireAdmin();
         folderService.moveFolder(dto);
         return Result.ok();
+    }
+
+    private void requireAdmin() {
+        if (!UserContext.isAdmin()) {
+            throw new BusinessException(403, "无权限，仅管理员可操作");
+        }
     }
 }

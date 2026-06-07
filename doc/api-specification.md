@@ -17,6 +17,7 @@
 | code | message | 触发场景 |
 |------|---------|----------|
 | 400 | 参数校验失败信息 | @Valid 校验不通过、业务规则不满足 |
+| 401 | 未授权 | JWT Token 缺失、过期或无效 |
 | 404 | 资源不存在 | 查询的目录/文章/附件编码不存在 |
 | 413 | 文件大小超过限制 | 上传文件 > 10MB |
 | 500 | 系统异常，请联系管理员 | 未捕获异常 |
@@ -141,11 +142,25 @@ GET /api/folders/{folderCode}
 
 **响应** `Result<FolderVO>`:
 
-**说明**: 根据 folderCode 查询单个目录信息，返回完整的 FolderVO（含 childrenCount 和 articleCount）。
+**说明**: 根据 folderCode 查询单个目录信息，返回完整的 FolderVO（含 childrenCount、articleCount、createdBy、updatedBy）。
 
 ---
 
-### 2.4 新增目录
+### 2.4 获取所有目录（平铺）
+
+```
+GET /api/folders/all
+```
+
+**查询参数**: 无
+
+**响应** `Result<List<FolderVO>>`:
+
+**说明**: 一次查询返回所有目录的平铺列表，用于前端内存构建目录树、父链计算和批量操作场景。
+
+---
+
+### 2.5 新增目录
 
 ```
 POST /api/folders
@@ -201,7 +216,7 @@ POST /api/folders
 
 ---
 
-### 2.5 修改目录
+### 2.6 修改目录
 
 ```
 PUT /api/folders
@@ -257,7 +272,7 @@ PUT /api/folders
 
 ---
 
-### 2.6 删除目录
+### 2.7 删除目录
 
 ```
 DELETE /api/folders/{folderCode}
@@ -291,7 +306,7 @@ DELETE /api/folders/{folderCode}
 
 ---
 
-### 2.7 目录拖拽排序
+### 2.8 目录拖拽排序
 
 ```
 PUT /api/folders/sort
@@ -336,7 +351,7 @@ PUT /api/folders/sort
 
 ---
 
-### 2.8 移动目录
+### 2.9 移动目录
 
 ```
 PUT /api/folders/move
@@ -993,3 +1008,252 @@ GET /api/search
 **禁止的流转**：
 - PUBLISHED → PUBLISHED（重复发布）
 - DRAFT → OFFLINE（草稿不可直接下线）
+
+---
+
+## 7. 认证模块 `/api/auth`
+
+### 7.1 登录
+
+```
+POST /api/auth/login
+```
+
+**请求体** `LoginDTO` (JSON):
+
+| 字段 | 类型 | 必填 | 校验 | 说明 |
+|------|------|------|------|------|
+| username | string | 是 | @NotBlank | 用户名 |
+| password | string | 是 | @NotBlank | 密码 |
+
+**响应** `Result<LoginVO>`:
+
+```json
+{
+  "code": 200,
+  "message": "ok",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "username": "admin",
+    "role": "ADMIN"
+  }
+}
+```
+
+**说明**: 校验通过后签发 JWT Token，Token 通过 `Authorization: Bearer {token}` 传递。GET 请求放行但尝试解析 Token，写操作（POST/PUT/DELETE）需要有效 Token。Token 剩余 < 1 天时通过 `X-New-Token` 响应头返回新 Token。
+
+---
+
+### 7.2 获取当前用户
+
+```
+GET /api/auth/me
+```
+
+**响应** `Result<UserVO>`:
+
+```json
+{
+  "code": 200,
+  "message": "ok",
+  "data": {
+    "username": "admin",
+    "role": "ADMIN",
+    "status": 1,
+    "createdAt": "2026-06-05 00:00:00"
+  }
+}
+```
+
+---
+
+## 8. 用户管理模块 `/api/users`
+
+> 所有接口需要 ADMIN 角色权限。
+
+### 8.1 用户列表
+
+```
+GET /api/users
+```
+
+**响应** `Result<List<UserVO>>`
+
+---
+
+### 8.2 创建用户
+
+```
+POST /api/users
+```
+
+**请求体** `UserCreateDTO` (JSON):
+
+| 字段 | 类型 | 必填 | 校验 | 说明 |
+|------|------|------|------|------|
+| username | string | 是 | @NotBlank, @Size(min=2, max=64) | 用户名 |
+| password | string | 是 | @NotBlank | 密码（至少8位，含大小写+数字+特殊字符） |
+| role | string | 否 | — | 角色，默认 "USER" |
+
+**响应** `Result<UserVO>`
+
+---
+
+### 8.3 更新用户
+
+```
+PUT /api/users
+```
+
+**请求体** `UserUpdateDTO` (JSON):
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| username | string | 是 | 用户名 |
+| role | string | 否 | 角色 |
+| status | integer | 否 | 1-启用 0-禁用 |
+
+**响应** `Result<UserVO>`
+
+---
+
+### 8.4 删除用户
+
+```
+DELETE /api/users/{username}
+```
+
+**说明**: 软删除，删除前将 username 修改为 `原值_del_时间戳` 以释放唯一索引。
+
+---
+
+### 8.5 重置密码
+
+```
+PUT /api/users/{username}/password
+```
+
+**请求体** `UserPasswordDTO` (JSON):
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| oldPassword | string | 否 | 旧密码（用户自行修改时需要） |
+| newPassword | string | 是 | 新密码 |
+
+---
+
+## 9. 栏目权限模块 `/api/folder-permissions`
+
+### 9.1 查询用户权限列表
+
+```
+GET /api/folder-permissions?username={username}
+```
+
+**权限**: ADMIN
+
+**响应** `Result<List<FolderPermissionVO>>`:
+
+```json
+{
+  "code": 200,
+  "message": "ok",
+  "data": [
+    { "username": "test", "folderCode": "1893274912345" },
+    { "username": "test", "folderCode": "1893274912346" }
+  ]
+}
+```
+
+---
+
+### 9.2 查询当前用户权限
+
+```
+GET /api/folder-permissions/mine
+```
+
+**说明**: 普通用户通过此接口获取自身权限，避免 403。
+
+---
+
+### 9.3 授权
+
+```
+POST /api/folder-permissions/grant
+```
+
+**请求体** `PermissionDTO`: `{ username, folderCode }`
+
+**说明**: 授予某栏目权限时，自动级联授予其所有子栏目（内存遍历，一次批量 INSERT）。
+
+---
+
+### 9.4 撤销授权
+
+```
+POST /api/folder-permissions/revoke
+```
+
+**请求体** `PermissionDTO`: `{ username, folderCode }`
+
+**说明**: 撤销某栏目权限时，自动级联撤销其所有子栏目（物理删除，避免唯一索引冲突）。
+
+---
+
+### 9.5 批量更新权限
+
+```
+POST /api/folder-permissions/batch
+```
+
+**请求体** `BatchPermissionDTO`:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| username | string | 用户名 |
+| grantCodes | string[] | 需要授权的栏目编码列表 |
+| revokeCodes | string[] | 需要撤销的栏目编码列表 |
+
+**说明**: 前端权限配置页面一次性提交所有变更，避免 N+1 请求。
+
+---
+
+## 10. 版本管理模块 `/api/articles/{articleCode}/versions`
+
+### 10.1 获取版本列表
+
+```
+GET /api/articles/{articleCode}/versions
+```
+
+**响应** `Result<List<ArticleVersionVO>>`:
+
+```json
+{
+  "code": 200,
+  "message": "ok",
+  "data": [
+    {
+      "versionNumber": 3,
+      "status": "PUBLISHED",
+      "contentMd": "# 标题\n\n内容...",
+      "title": "文章标题",
+      "createdBy": "admin",
+      "createdAt": "2026-06-01 10:00:00"
+    }
+  ]
+}
+```
+
+**说明**: 文章每次保存（update）时，自动将保存前的内容归档为新版本，版本号自增。
+
+---
+
+### 10.2 获取版本详情
+
+```
+GET /api/articles/{articleCode}/versions/{versionNumber}
+```
+
+**响应** `Result<ArticleVersionVO>`

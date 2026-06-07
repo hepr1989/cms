@@ -10,7 +10,9 @@ export interface FolderVO {
   childrenCount: number;
   articleCount: number;
   createdAt: string;
+  createdBy?: string;
   updatedAt: string;
+  updatedBy?: string;
 }
 
 export interface FolderTreeVO {

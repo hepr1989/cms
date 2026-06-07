@@ -108,7 +108,11 @@ public class FolderServiceImpl implements FolderService {
     public FolderVO create(FolderCreateDTO dto) {
         String parentCode = StringUtils.hasText(dto.getParentFolderCode()) ? dto.getParentFolderCode() : "-1";
 
-        if (!"-1".equals(parentCode)) {
+        String rootFolderCode;
+        if ("-1".equals(parentCode)) {
+            // Will be set after folderCode is generated
+            rootFolderCode = null;
+        } else {
             Folder parent = folderMapper.selectOne(
                     new LambdaQueryWrapper<Folder>()
                             .eq(Folder::getFolderCode, parentCode)
@@ -116,6 +120,7 @@ public class FolderServiceImpl implements FolderService {
             if (parent == null) {
                 throw new BusinessException(400, "父目录不存在或已不可用");
             }
+            rootFolderCode = parent.getRootFolderCode();
         }
 
         Folder folder = new Folder();
@@ -123,6 +128,12 @@ public class FolderServiceImpl implements FolderService {
         folder.setTitle(dto.getTitle());
         folder.setParentFolderCode(parentCode);
         folder.setDescription(dto.getDescription());
+
+        // Top-level folder: rootFolderCode = own folderCode
+        if (rootFolderCode == null) {
+            rootFolderCode = folder.getFolderCode();
+        }
+        folder.setRootFolderCode(rootFolderCode);
 
         Folder maxSortFolder = folderMapper.selectOne(
                 new LambdaQueryWrapper<Folder>()
@@ -249,15 +260,26 @@ public class FolderServiceImpl implements FolderService {
         folderMapper.updateById(folder);
     }
 
-    /** 检查 targetCode 是否是 folderCode 的后代 */
+    /** 检查 targetCode 是否是 folderCode 的后代（内存遍历，一次查询所有栏目） */
     private boolean isDescendant(String folderCode, String targetCode) {
-        List<Folder> children = folderMapper.selectList(
-                new LambdaQueryWrapper<Folder>()
-                        .eq(Folder::getParentFolderCode, folderCode)
-                        .eq(Folder::getStatus, 1));
-        for (Folder child : children) {
-            if (child.getFolderCode().equals(targetCode)) return true;
-            if (isDescendant(child.getFolderCode(), targetCode)) return true;
+        // 一次查询所有栏目，构建 parentCode → childrenCodes 映射
+        List<Folder> allFolders = folderMapper.selectList(
+                new LambdaQueryWrapper<Folder>().eq(Folder::getStatus, 1));
+        Map<String, List<String>> childrenMap = new HashMap<>();
+        for (Folder f : allFolders) {
+            childrenMap.computeIfAbsent(f.getParentFolderCode(), k -> new ArrayList<>())
+                    .add(f.getFolderCode());
+        }
+        return isDescendantInMemory(folderCode, targetCode, childrenMap);
+    }
+
+    private boolean isDescendantInMemory(String folderCode, String targetCode,
+                                         Map<String, List<String>> childrenMap) {
+        List<String> children = childrenMap.get(folderCode);
+        if (children == null) return false;
+        for (String child : children) {
+            if (child.equals(targetCode)) return true;
+            if (isDescendantInMemory(child, targetCode, childrenMap)) return true;
         }
         return false;
     }
@@ -275,5 +297,16 @@ public class FolderServiceImpl implements FolderService {
                 new LambdaQueryWrapper<Folder>()
                         .eq(Folder::getFolderCode, folderCode)
                         .eq(Folder::getStatus, 1)) > 0;
+    }
+
+    @Override
+    public List<FolderVO> getAllFoldersFlat() {
+        List<Folder> folders = folderMapper.selectList(
+                new LambdaQueryWrapper<Folder>()
+                        .eq(Folder::getStatus, 1)
+                        .orderByAsc(Folder::getSort));
+        return folders.stream()
+                .map(f -> BeanCopyUtil.copyProperties(f, FolderVO.class))
+                .collect(Collectors.toList());
     }
 }

@@ -13,7 +13,9 @@ public class FolderVO {
     private String description;
     private Integer sort;
     private LocalDateTime createdAt;
+    private String createdBy;
     private LocalDateTime updatedAt;
+    private String updatedBy;
     private Integer childrenCount;
     private Integer articleCount;
 }

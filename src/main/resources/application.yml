@@ -30,6 +30,9 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 cms:
+  jwt:
+    secret: cms-jwt-secret-key-2026-hepr-internal
+    expiration: 604800000
   storage:
     type: local
     local:

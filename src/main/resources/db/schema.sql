@@ -6,6 +6,7 @@ CREATE TABLE cms_folder (
     title           VARCHAR(255) NOT NULL COMMENT '标题',
     folder_code     VARCHAR(64)  NOT NULL COMMENT '目录编码（雪花算法生成）',
     parent_folder_code VARCHAR(64) NOT NULL DEFAULT '-1' COMMENT '父目录编码，-1表示根级',
+    root_folder_code VARCHAR(64) DEFAULT NULL COMMENT '所属根栏目编码',
     status          TINYINT      NOT NULL DEFAULT 1 COMMENT '1-正常 0-不可用',
     description     VARCHAR(512) DEFAULT '' COMMENT '描述',
     sort            INT          NOT NULL DEFAULT 0 COMMENT '排序字段',
@@ -17,7 +18,7 @@ CREATE TABLE cms_folder (
     PRIMARY KEY (id),
     UNIQUE KEY uk_folder_code (folder_code),
     KEY idx_parent_folder_code (parent_folder_code),
-    KEY idx_status (status)
+    KEY idx_root_folder_code (root_folder_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='目录表';
 
 CREATE TABLE cms_article (
@@ -29,6 +30,7 @@ CREATE TABLE cms_article (
     status          VARCHAR(20)  NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT-草稿 PUBLISHED-已发布 OFFLINE-已下线',
     published_at    DATETIME     DEFAULT NULL COMMENT '发布时间',
     sort            INT          NOT NULL DEFAULT 0 COMMENT '排序字段',
+    version_number  INT          NOT NULL DEFAULT 1 COMMENT '当前版本号',
     created_by      VARCHAR(64)  DEFAULT 'system' COMMENT '创建人',
     created_at      DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_by      VARCHAR(64)  DEFAULT 'system' COMMENT '更新人',
@@ -36,9 +38,7 @@ CREATE TABLE cms_article (
     del_flag        TINYINT      NOT NULL DEFAULT 0 COMMENT '0-未删除 1-已删除',
     PRIMARY KEY (id),
     UNIQUE KEY uk_article_code (article_code),
-    KEY idx_folder_code (folder_code),
-    KEY idx_status (status),
-    KEY idx_published_at (published_at)
+    KEY idx_folder_status (folder_code, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章表';
 
 CREATE TABLE cms_attachment (
@@ -73,3 +73,49 @@ CREATE TABLE cms_attachment_ref (
     KEY idx_ref_type_code (ref_type, ref_code),
     KEY idx_attachment_code (attachment_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='附件关联表';
+
+CREATE TABLE cms_user (
+    id              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键（自增）',
+    username        VARCHAR(64)  NOT NULL COMMENT '用户名',
+    password        VARCHAR(255) NOT NULL COMMENT 'BCrypt加密密码',
+    role            VARCHAR(20)  NOT NULL DEFAULT 'USER' COMMENT '角色：ADMIN-管理员 USER-普通用户',
+    status          TINYINT      NOT NULL DEFAULT 1 COMMENT '1-启用 0-禁用',
+    created_by      VARCHAR(64)  DEFAULT 'system' COMMENT '创建人',
+    created_at      DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by      VARCHAR(64)  DEFAULT 'system' COMMENT '更新人',
+    updated_at      DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    del_flag        TINYINT      NOT NULL DEFAULT 0 COMMENT '0-未删除 1-已删除',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+CREATE TABLE cms_folder_permission (
+    id              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键（自增）',
+    username        VARCHAR(64)  NOT NULL COMMENT '用户名',
+    folder_code     VARCHAR(64)  NOT NULL COMMENT '栏目编码',
+    created_by      VARCHAR(64)  DEFAULT 'system' COMMENT '创建人',
+    created_at      DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by      VARCHAR(64)  DEFAULT 'system' COMMENT '更新人',
+    updated_at      DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    del_flag        TINYINT      NOT NULL DEFAULT 0 COMMENT '0-未删除 1-已删除',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_username_folder (username, folder_code, del_flag),
+    KEY idx_folder_code (folder_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='栏目编辑权限表';
+
+CREATE TABLE cms_article_version (
+    id              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键（自增）',
+    article_code    VARCHAR(64)  NOT NULL COMMENT '所属文章编码',
+    title           VARCHAR(255) NOT NULL COMMENT '标题快照',
+    content_md      LONGTEXT     DEFAULT NULL COMMENT 'Markdown正文快照',
+    status          VARCHAR(20)  NOT NULL DEFAULT 'PUBLISHED' COMMENT '归档时的状态',
+    version_number  INT          NOT NULL COMMENT '版本号',
+    published_at    DATETIME     DEFAULT NULL COMMENT '归档时的发布时间',
+    created_by      VARCHAR(64)  DEFAULT 'system' COMMENT '创建人（归档操作人）',
+    created_at      DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（归档时间）',
+    updated_by      VARCHAR(64)  DEFAULT 'system' COMMENT '更新人',
+    updated_at      DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    del_flag        TINYINT      NOT NULL DEFAULT 0 COMMENT '0-未删除 1-已删除',
+    PRIMARY KEY (id),
+    KEY idx_article_version (article_code, version_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章历史版本表';

@@ -5,7 +5,9 @@ import { Button, List, Typography, message, Progress } from 'antd';
 import { FolderOutlined, FileTextOutlined, ArrowLeftOutlined, EditOutlined, FolderAddOutlined, FileAddOutlined, ImportOutlined } from '@ant-design/icons';
 import { useTreeStore } from '@/store/tree-store';
 import { useUIStore } from '@/store/ui-store';
-import { getChildren } from '@/api/folder';
+import { useAuthStore } from '@/store/auth-store';
+import { getChildren, getFolder } from '@/api/folder';
+import { getMyPermissions } from '@/api/permission';
 import { importPdf } from '@/api/article';
 import ArticleStatusBadge from '@/components/article/ArticleStatusBadge';
 import type { FolderVO, ArticleVO, FolderTreeVO, TreeDataNode } from '@/types';
@@ -28,13 +30,16 @@ export default function FolderViewPage() {
   const treeData = useTreeStore(s => s.treeData);
   const syncSelection = useTreeStore(s => s.syncSelection);
   const addArticleNode = useTreeStore(s => s.addArticleNode);
+  const isAdmin = useAuthStore(s => s.isAdmin);
+  const user = useAuthStore(s => s.user);
+  const [folderInfo, setFolderInfo] = React.useState<FolderVO | null>(null);
   const [data, setData] = React.useState<FolderTreeVO | null>(null);
   const [importing, setImporting] = React.useState(false);
   const [importProgress, setImportProgress] = React.useState(0);
   const [importFileName, setImportFileName] = React.useState('');
+  const [hasFolderPermission, setHasFolderPermission] = React.useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 是否为最外层目录（父级是根目录则不显示返回按钮）
   const isTopLevel = useMemo(() => {
     if (!folderCode) return true;
     const folderKey = `folder-${folderCode}`;
@@ -42,7 +47,6 @@ export default function FolderViewPage() {
     return !node?.parentKey || node.parentKey === '-1';
   }, [folderCode, treeData]);
 
-  // 查找父目录名称
   const parentFolderTitle = useMemo(() => {
     if (isTopLevel) return null;
     if (!folderCode) return null;
@@ -62,10 +66,24 @@ export default function FolderViewPage() {
 
   useEffect(() => {
     if (folderCode) {
+      getFolder(folderCode).then(f => setFolderInfo(f as unknown as FolderVO)).catch(() => {});
       getChildren(folderCode, false).then(d => setData(d as any));
       syncSelection(`folder-${folderCode}`);
     }
   }, [folderCode]);
+
+  // 检查当前用户对当前栏目的编辑权限
+  useEffect(() => {
+    if (!folderCode || !user) return;
+    if (isAdmin()) {
+      setHasFolderPermission(true);
+      return;
+    }
+    getMyPermissions().then(perms => {
+      const list = perms as unknown as { folderCode: string }[];
+      setHasFolderPermission(list.some(p => p.folderCode === folderCode));
+    }).catch(() => setHasFolderPermission(false));
+  }, [folderCode, user]);
 
   const handleImportPdf = () => {
     fileInputRef.current?.click();
@@ -75,7 +93,6 @@ export default function FolderViewPage() {
     const file = e.target.files?.[0];
     if (!file || !folderCode) return;
 
-    // 校验文件类型
     if (!file.name.toLowerCase().endsWith('.pdf') && !file.type.includes('pdf')) {
       message.error('请选择 PDF 文件');
       return;
@@ -91,14 +108,8 @@ export default function FolderViewPage() {
       });
       const article = (res as any).data || res;
       message.success('PDF 导入成功');
-
-      // 更新侧栏树
       addArticleNode(`folder-${folderCode}`, article as ArticleVO);
-
-      // 刷新目录数据
       refreshData();
-
-      // 跳转到编辑页
       navigate(`/admin/article/${(article as ArticleVO).articleCode}`);
     } catch (err: any) {
       const errMsg = err?.response?.data?.message || err?.message || 'PDF 导入失败';
@@ -107,7 +118,6 @@ export default function FolderViewPage() {
       setImporting(false);
       setImportProgress(0);
       setImportFileName('');
-      // 重置 input 以便再次选择同一文件
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -115,6 +125,7 @@ export default function FolderViewPage() {
   if (!data) return <div>加载中...</div>;
 
   const hasContent = data.folders.length > 0 || data.articles.length > 0;
+  const showAdmin = isAdmin();
 
   return (
     <div className="folder-view-page">
@@ -124,38 +135,28 @@ export default function FolderViewPage() {
           <Typography.Title level={3} style={{ margin: 0 }}>{hasContent ? '栏目内容' : '空栏目'}</Typography.Title>
         </div>
         <div className="folder-view-actions">
-          <Button type="primary" ghost icon={<EditOutlined />} onClick={() => openModal('folderEdit', { folderCode })}>编辑栏目</Button>
-          <Button
-            type="primary"
-            ghost
-            icon={<FolderAddOutlined />}
-            onClick={() => openModal('folderCreate', { parentFolderCode: folderCode })}
-          >
-            新增栏目
-          </Button>
-          <Button
-            type="primary"
-            icon={<FileAddOutlined />}
-            onClick={() => navigate(`/admin/article/new?folderCode=${folderCode}`)}
-          >
-            新增文章
-          </Button>
-          <Button
-            type="primary"
-            ghost
-            icon={<ImportOutlined />}
-            loading={importing}
-            onClick={handleImportPdf}
-          >
-            导入PDF
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf"
-            style={{ display: 'none' }}
-            onChange={handleFileChange}
-          />
+          {showAdmin && (
+            <>
+              <Button type="primary" ghost icon={<EditOutlined />} onClick={() => openModal('folderEdit', { folderCode })}>编辑栏目</Button>
+              <Button
+                type="primary"
+                ghost
+                icon={<FolderAddOutlined />}
+                onClick={() => openModal('folderCreate', { parentFolderCode: folderCode })}
+              >
+                新增栏目
+              </Button>
+            </>
+          )}
+          {hasFolderPermission && (
+            <Button
+              type="primary"
+              icon={<FileAddOutlined />}
+              onClick={() => navigate(`/admin/article/new?folderCode=${folderCode}`)}
+            >
+              新增文章
+            </Button>
+          )}
         </div>
       </div>
 
@@ -182,11 +183,11 @@ export default function FolderViewPage() {
           renderItem={(f: FolderVO) => (
             <List.Item extra={
               <div style={{ display: 'flex', gap: 4 }}>
-                <Button type="link" onClick={() => openModal('folderEdit', { folderCode: f.folderCode })}>编辑</Button>
+                {showAdmin && <Button type="link" onClick={() => openModal('folderEdit', { folderCode: f.folderCode })}>编辑</Button>}
                 <Button type="link" onClick={() => navigate(`/admin/folder/${f.folderCode}`)}>查看</Button>
               </div>
             }>
-              <List.Item.Meta avatar={<FolderOutlined style={{ fontSize: 20, color: 'var(--color-primary)' }} />} title={f.title} description={f.description} />
+              <List.Item.Meta avatar={<FolderOutlined style={{ fontSize: 20, color: 'var(--color-primary)' }} />} title={f.title} description={f.updatedBy ? `最后修改: ${f.updatedBy} ${f.updatedAt || ''}` : (f.description || undefined)} />
             </List.Item>
           )}
         />
@@ -197,12 +198,28 @@ export default function FolderViewPage() {
           header={<span style={{ fontWeight: 600, fontSize: 14 }}>文章</span>}
           dataSource={data.articles}
           renderItem={(a: ArticleVO) => (
-            <List.Item extra={<><ArticleStatusBadge status={a.status} /><Button type="link" onClick={() => navigate(`/admin/article/${a.articleCode}`)}>编辑</Button></>}>
-              <List.Item.Meta avatar={<FileTextOutlined style={{ fontSize: 20 }} />} title={a.title} />
+            <List.Item extra={
+              <>
+                <ArticleStatusBadge status={a.status} />
+                {hasFolderPermission && <Button type="link" onClick={() => navigate(`/admin/article/${a.articleCode}`)}>编辑</Button>}
+              </>
+            }>
+              <List.Item.Meta
+                avatar={<FileTextOutlined style={{ fontSize: 20 }} />}
+                title={a.title}
+                description={a.updatedBy ? `最后修改: ${a.updatedBy} ${a.updatedAt || ''}` : undefined}
+              />
             </List.Item>
           )}
         />
       )}
+
+      <div className="metadata-bar">
+        <span className="meta-time">
+          最近修改: {folderInfo?.updatedAt || '-'}
+          {folderInfo?.updatedBy && <span style={{ marginLeft: 12 }}>修改人: {folderInfo.updatedBy}</span>}
+        </span>
+      </div>
     </div>
   );
 }

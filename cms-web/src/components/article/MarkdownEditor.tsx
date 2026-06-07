@@ -96,7 +96,7 @@ function insertMarkdownToContent(md: string) {
 }
 
 /** ============ 主组件 ============ */
-export default function MarkdownEditor() {
+export default function MarkdownEditor({ readOnly = false }: { readOnly?: boolean } = {}) {
   const article = useArticleStore(s => s.currentArticle);
   const setContent = useArticleStore(s => s.setContent);
   const isMobile = useUIStore(s => s.isMobile);
@@ -359,12 +359,12 @@ export default function MarkdownEditor() {
       <div data-color-mode="light" style={{ flex: 1, minHeight: 0 }} ref={editorRef}>
         <MDEditor
           value={article?.contentMd || ''}
-          onChange={val => setContent(val || '')}
-          preview={isMobile ? 'edit' : 'live'}
+          onChange={val => !readOnly && setContent(val || '')}
+          preview={readOnly ? 'preview' : (isMobile ? 'edit' : 'live')}
           height="100%"
           visibleDragbar={false}
-          commands={commands}
-          extraCommands={extraCommands}
+          commands={readOnly ? [] : commands}
+          extraCommands={readOnly ? [] : extraCommands}
           previewOptions={{ components: { a: AttachmentLink } }}
         />
       </div>

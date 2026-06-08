@@ -36,7 +36,40 @@
     <dependency>
         <groupId>io.minio</groupId>
         <artifactId>minio</artifactId>
-        <version>8.5.7</version>
+        <version>${minio.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.pdfbox</groupId>
+        <artifactId>pdfbox</artifactId>
+        <version>3.0.4</version>
+    </dependency>
+    <!-- JWT -->
+    <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-api</artifactId>
+        <version>${jjwt.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-impl</artifactId>
+        <version>${jjwt.version}</version>
+        <scope>runtime</scope>
+    </dependency>
+    <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-jackson</artifactId>
+        <version>${jjwt.version}</version>
+        <scope>runtime</scope>
+    </dependency>
+    <!-- BCrypt (standalone, no Spring Security auto-config) -->
+    <dependency>
+        <groupId>org.springframework.security</groupId>
+        <artifactId>spring-security-crypto</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <version>1.3.1</version>
     </dependency>
     <!-- 测试依赖 -->
     <dependency>
@@ -157,7 +190,20 @@ public class BusinessException extends RuntimeException {
 }
 ```
 
-### 2.5 GlobalExceptionHandler.java
+### 2.5 UnauthorizedException.java
+
+```java
+public class UnauthorizedException extends RuntimeException {
+    public UnauthorizedException(String message) {
+        super(message);
+    }
+    public UnauthorizedException() {
+        super("未登录或登录已过期");
+    }
+}
+```
+
+### 2.6 GlobalExceptionHandler.java
 
 ```java
 @Slf4j
@@ -210,12 +256,11 @@ public class GlobalExceptionHandler {
 }
 ```
 
-### 2.6 MyBatisPlusConfig.java
+### 2.7 MyBatisPlusConfig.java
 
 ```java
 @Configuration
 public class MyBatisPlusConfig {
-    // 分页插件
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
@@ -223,21 +268,26 @@ public class MyBatisPlusConfig {
         return interceptor;
     }
 
-    // 自动填充处理器
     @Bean
     public MetaObjectHandler metaObjectHandler() {
         return new MetaObjectHandler() {
             @Override
             public void insertFill(MetaObject metaObject) {
-                this.strictInsertFill(metaObject, "createdBy", String.class, "system");
+                String username = currentUser();
+                this.strictInsertFill(metaObject, "createdBy", String.class, username);
                 this.strictInsertFill(metaObject, "createdAt", LocalDateTime.class, LocalDateTime.now());
-                this.strictInsertFill(metaObject, "updatedBy", String.class, "system");
+                this.strictInsertFill(metaObject, "updatedBy", String.class, username);
                 this.strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
             }
             @Override
             public void updateFill(MetaObject metaObject) {
-                this.strictUpdateFill(metaObject, "updatedBy", String.class, "system");
-                this.strictUpdateFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
+                // strictUpdateFill 仅在字段为 null 时填充，更新时需强制覆盖
+                this.setFieldValByName("updatedBy", currentUser(), metaObject);
+                this.setFieldValByName("updatedAt", LocalDateTime.now(), metaObject);
+            }
+            private String currentUser() {
+                String name = UserContext.getUsername();
+                return name != null ? name : "system";
             }
         };
     }
@@ -256,7 +306,7 @@ mybatis-plus:
       logic-not-delete-value: 0
 ```
 
-### 2.7 CorsConfig.java
+### 2.8 CorsConfig.java
 
 ```java
 @Configuration
@@ -268,6 +318,7 @@ public class CorsConfig implements WebMvcConfigurer {
                 .allowedOrigins("http://localhost:5173", "http://localhost:3000")
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
+                .exposedHeaders("Authorization", "X-New-Token")
                 .allowCredentials(true)
                 .maxAge(3600);
         registry.addMapping("/uploads/**")
@@ -278,7 +329,7 @@ public class CorsConfig implements WebMvcConfigurer {
 }
 ```
 
-### 2.8 JacksonConfig.java
+### 2.9 JacksonConfig.java
 
 ```java
 @Configuration
@@ -295,26 +346,44 @@ public class JacksonConfig {
 }
 ```
 
-### 2.9 WebMvcConfig.java
+### 2.10 WebMvcConfig.java
 
 ```java
 @Configuration
+@RequiredArgsConstructor
 public class WebMvcConfig implements WebMvcConfigurer {
     @Value("${cms.storage.local.base-path:./uploads}")
     private String uploadBasePath;
 
-    // 静态资源映射：/uploads/** → 本地文件系统
+    private final AuthInterceptor authInterceptor;
+
+    // 静态资源映射：/uploads/** → 本地文件系统（绝对路径）
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        String absolutePath = Paths.get(uploadBasePath).toAbsolutePath().normalize().toString();
         registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:" + uploadBasePath + "/");
+                .addResourceLocations("file:" + absolutePath + "/");
     }
 
-    // SPA Fallback：非 /api 路径转发到 index.html
-    @Bean
-    public ErrorPageRegistrar errorPageRegistrar() {
-        return registry -> registry.addErrorPage(new ErrorPage(
-            HttpStatus.NOT_FOUND, "/index.html"));
+    // JWT 拦截器：拦截 /api/**，排除登录和静态资源
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(authInterceptor)
+                .addPathPatterns("/api/**")
+                .excludePathPatterns("/api/auth/login", "/uploads/**");
+    }
+
+    // SPA Fallback：/error 请求转发到 index.html
+    @Controller
+    public static class SpaErrorController implements ErrorController {
+        @RequestMapping("/error")
+        public Object handleError() {
+            ClassPathResource indexHtml = new ClassPathResource("static/index.html");
+            if (indexHtml.exists()) {
+                return "forward:/index.html";
+            }
+            return Result.fail(404, "资源不存在");
+        }
     }
 }
 ```
@@ -332,12 +401,13 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
 ┌─────────────────────────────────────┐
 │ Article 聚合根                       │
-│   Entity: Article                    │
+│   Entity: Article, ArticleVersion   │
 │   Value Objects:                     │
 │     Attachment (间接)                 │
 │     AttachmentRef (间接)              │
 │   Service: ArticleService            │
-│   Mapper: ArticleMapper              │
+│   Mapper: ArticleMapper,             │
+│          ArticleVersionMapper        │
 │   跨聚合根调用: FolderService (@Lazy)  │
 └─────────────────────────────────────┘
 
@@ -348,6 +418,25 @@ public class WebMvcConfig implements WebMvcConfigurer {
 │   Mapper: AttachmentMapper,          │
 │          AttachmentRefMapper         │
 │   Service: StorageService (策略模式)  │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│ Auth 模块（认证与用户）             │
+│   Entity: User                       │
+│   Security: JwtTokenProvider,        │
+│            AuthInterceptor,          │
+│            UserContext (ThreadLocal)  │
+│   Controller: AuthController,        │
+│              UserController          │
+│   Service: UserService               │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│ Permission 模块（栏目权限）          │
+│   Entity: FolderPermission           │
+│   Controller: FolderPermissionCtrl   │
+│   Service: PermissionService         │
+│   Mapper: FolderPermissionMapper     │
 └─────────────────────────────────────┘
 ```
 
@@ -369,6 +458,7 @@ public class Folder extends BaseEntity {
     private String title;
     private String folderCode;
     private String parentFolderCode;  // -1 = 根级
+    private String rootFolderCode;     // 根栏目编码（继承自最顶层父栏目）
     private Integer status;            // 1-正常 0-不可用
     private String description;
     private Integer sort;
@@ -435,7 +525,9 @@ public class FolderVO {
     private String description;
     private Integer sort;
     private LocalDateTime createdAt;
+    private String createdBy;
     private LocalDateTime updatedAt;
+    private String updatedBy;
     private Integer childrenCount;  // 子目录数量
     private Integer articleCount;   // 文章数量
 }
@@ -454,6 +546,7 @@ public interface FolderService {
     List<FolderVO> getRootFolders();
     List<FolderVO> getRootFolders(boolean portalMode);
     FolderTreeVO getChildren(String folderCode, boolean portalMode);
+    List<FolderVO> getAllFoldersFlat();
     FolderVO create(FolderCreateDTO dto);
     FolderVO update(FolderUpdateDTO dto);
     void delete(String folderCode);
@@ -549,6 +642,9 @@ public interface FolderMapper extends BaseMapper<Folder> {
 @RequestMapping("/api/folders")
 @RequiredArgsConstructor
 public class FolderController {
+    @GetMapping("/all")
+    public Result<List<FolderVO>> getAllFoldersFlat();
+
     @GetMapping("/root")
     public Result<List<FolderVO>> getRootFolders(
             @RequestParam(defaultValue = "false") boolean portalMode);
@@ -593,6 +689,7 @@ public class Article extends BaseEntity {
     private String status;          // DRAFT / PUBLISHED / OFFLINE
     private LocalDateTime publishedAt;
     private Integer sort;
+    private Integer versionNumber;   // 版本号，初始为 1
 }
 ```
 
@@ -669,6 +766,8 @@ public class ArticleVO {
     private String status;
     private LocalDateTime publishedAt;
     private Integer sort;
+    private Integer versionNumber;  // 当前版本号
+    private String updatedBy;       // 最近修改人
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String folderTitle;    // 所属目录标题（冗余字段）
@@ -688,6 +787,8 @@ public interface ArticleService {
     void delete(String articleCode);
     void updateSort(ArticleSortDTO dto);
     void moveArticle(ArticleMoveDTO dto);
+    List<ArticleVersionVO> getVersions(String articleCode);
+    ArticleVersionVO getVersionDetail(String articleCode, Integer versionNumber);
 
     /** 供其他聚合根调用 */
     List<ArticleVO> listByFolderCode(String folderCode, boolean portalMode);
@@ -770,11 +871,12 @@ public interface ArticleMapper extends BaseMapper<Article> {
 | 方法 | 核心逻辑 |
 |------|---------|
 | getDetail | 根据 articleCode 查询 → 填充 folderTitle（FolderService.getByCode） |
-| create | IdWorker.getIdStr() → FolderService.existsAndActive 校验目录 → sort = 同目录最大sort+1 → status=DRAFT → INSERT |
-| update | 查询文章 → **如果当前 PUBLISHED，自动改为 DRAFT，清空 publishedAt** → 更新字段 |
+| create | IdWorker.getIdStr() → FolderService.existsAndActive 校验目录 → sort = 同目录最大sort+1 → status=DRAFT, versionNumber=1 → INSERT |
+| update | 查询文章 → **如果当前状态非 DRAFT，先归档当前版本（archiveVersion）并 versionNumber+1，再重置为 DRAFT** → 更新 title/contentMd/folderCode |
 | publish | 查询 → canTransitionTo(PUBLISHED) 校验 → status=PUBLISHED, publishedAt=now() |
 | offline | 查询 → canTransitionTo(OFFLINE) 校验 → status=OFFLINE |
-| delete | 查询 → 逻辑删除 → 逻辑删除关联的 AttachmentRef |
+| delete | 查询 → 逻辑删除文章 → 逻辑删除关联的 AttachmentRef → 删除版本历史 |
+| archiveVersion | 将当前文章的 title/contentMd/status/versionNumber/publishedAt 快照写入 cms_article_version 表 |
 | updateSort | 同 FolderServiceImpl.updateSort |
 | moveArticle | 查询文章 → 校验目标目录存在 → 如果提供 targetCode+position 则定位，否则追加到末尾（getMaxSort） → 更新 folderCode 和 sort |
 | listByFolderCode | LambdaQueryWrapper + portalMode 过滤 + sort ASC |
@@ -924,7 +1026,8 @@ public class PdfImportResult {
 
 **图片提取规则**:
 - 过滤尺寸小于 30px 的图片（图标噪音）
-- 过滤尺寸小于 50px 的图片（小图标）
+- 过滤尺寸小于 50px 且近似正方形的图片（小图标）
+- 过滤文件小于 500 字节的图片
 - 最多提取 50 张图片
 - 图片通过 AttachmentService.uploadFromBytes 存储，关联到文章
 
@@ -997,6 +1100,9 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 cms:
+  jwt:
+    secret: cms-jwt-secret-key-2026-hepr-internal
+    expiration: 604800000          # 7天 = 7*24*3600*1000 ms
   storage:
     type: local
     local:
@@ -1035,7 +1141,7 @@ spring:
   sql:
     init:
       mode: always
-      schema-locations: classpath:schema.sql
+      schema-locations: classpath:db/schema-h2.sql
 
 mybatis-plus:
   global-config:
@@ -1047,3 +1153,312 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
 ```
+
+## 9. 认证与用户模块
+
+### 9.1 User.java
+
+```java
+@Data
+@TableName("cms_user")
+@EqualsAndHashCode(callSuper = true)
+public class User extends BaseEntity {
+    private String username;   // VARCHAR(64)，唯一索引
+    private String password;   // VARCHAR(255)，BCrypt 加密
+    private String role;       // ADMIN / USER
+    private Integer status;    // 1-启用 0-禁用
+}
+```
+
+### 9.2 DTO
+
+```java
+// LoginDTO
+public class LoginDTO {
+    @NotBlank private String username;
+    @NotBlank private String password;
+}
+
+// UserCreateDTO
+public class UserCreateDTO {
+    @Size(min = 2, max = 64) private String username;
+    @NotBlank private String password;
+    private String role;  // 默认 "USER"
+}
+
+// UserUpdateDTO
+public class UserUpdateDTO {
+    @NotBlank private String username;
+    private String role;
+    private Integer status;
+}
+
+// UserPasswordDTO
+public class UserPasswordDTO {
+    private String oldPassword;
+    @NotBlank private String newPassword;
+}
+```
+
+### 9.3 VO
+
+```java
+// LoginVO
+public class LoginVO {
+    private String token;
+    private String username;
+    private String role;
+}
+
+// UserVO
+public class UserVO {
+    private String username;
+    private String role;
+    private Integer status;
+    private LocalDateTime createdAt;
+}
+```
+
+### 9.4 JwtTokenProvider
+
+- 密钥从 `cms.jwt.secret` 读取，截断/补零到 32 字节，`Keys.hmacShaKeyFor`
+- 过期时间从 `cms.jwt.expiration` 读取，默认 604800000ms（7天）
+- `generateToken(username, role)` → subject=username, claim role=role
+- `needsRefresh(token)` → 剩余有效期 < 86400000ms（1天）时返回 true
+
+### 9.5 AuthInterceptor
+
+| HTTP 方法 | 行为 |
+|-----------|------|
+| OPTIONS | 直接放行 |
+| GET | 放行 + 尝试解析 token 设置 UserContext |
+| POST/PUT/DELETE | 必须有效 JWT，否则返回 401 JSON |
+
+- **滑动刷新**：POST/PUT/DELETE 时若 `needsRefresh`，通过 `X-New-Token` header 返回新 token
+- **afterCompletion**：调用 `UserContext.clear()` 防止 ThreadLocal 泄漏
+
+### 9.6 UserContext
+
+```java
+public class UserContext {
+    private static final ThreadLocal<Context> HOLDER = new ThreadLocal<>();
+    record Context(String username, String role) {}
+
+    public static void set(String username, String role);
+    public static String getUsername();
+    public static String getRole();
+    public static boolean isAdmin();     // "ADMIN".equals(getRole())
+    public static boolean isLoggedIn();  // HOLDER.get() != null
+    public static void clear();
+}
+```
+
+### 9.7 UserServiceImpl 实现逻辑
+
+| 方法 | 核心逻辑 |
+|------|--------|
+| login | 校验 status==1 → BCrypt matches → 生成 JWT → 返回 LoginVO |
+| getCurrentUser | UserContext.getUsername() → 查库返回 UserVO |
+| list | LambdaQueryWrapper 查所有用户 |
+| create | 密码强度正则校验 → BCrypt 加密 → INSERT |
+| update | 查询 → 更新 role/status |
+| delete | admin 不可删除 → 软删除前将 username 改为 `{原名}_del_{时间戳}` 释放唯一索引 |
+| resetPassword | 仅管理员操作，不校验旧密码 → 密码强度校验 → BCrypt 加密 → UPDATE |
+
+**密码复杂度正则**：`^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$`
+
+### 9.8 AuthController
+
+```java
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+    @PostMapping("/login")
+    public Result<LoginVO> login(@Validated @RequestBody LoginDTO dto);
+
+    @GetMapping("/me")
+    public Result<UserVO> getCurrentUser();
+}
+```
+
+### 9.9 UserController
+
+```java
+@RestController
+@RequestMapping("/api/users")
+@RequiredArgsConstructor
+public class UserController {
+    @GetMapping
+    public Result<List<UserVO>> list();
+
+    @PostMapping
+    public Result<UserVO> create(@Validated @RequestBody UserCreateDTO dto);
+
+    @PutMapping
+    public Result<UserVO> update(@Validated @RequestBody UserUpdateDTO dto);
+
+    @DeleteMapping("/{username}")
+    public Result<Void> delete(@PathVariable String username);
+
+    @PutMapping("/{username}/password")
+    public Result<Void> resetPassword(@PathVariable String username,
+                                       @Validated @RequestBody UserPasswordDTO dto);
+}
+```
+
+> 所有接口均需 ADMIN 角色访问（通过 AuthInterceptor + UserContext.isAdmin() 校验）
+
+## 10. 栏目权限模块
+
+### 10.1 FolderPermission.java
+
+```java
+@Data
+@TableName("cms_folder_permission")
+@EqualsAndHashCode(callSuper = true)
+public class FolderPermission extends BaseEntity {
+    private String username;
+    private String folderCode;
+}
+```
+
+### 10.2 DTO
+
+```java
+// PermissionDTO
+public class PermissionDTO {
+    @NotBlank private String username;
+    @NotBlank private String folderCode;
+}
+
+// BatchPermissionDTO
+public class BatchPermissionDTO {
+    @NotBlank private String username;
+    private List<String> grantCodes;
+    private List<String> revokeCodes;
+}
+```
+
+### 10.3 FolderPermissionVO
+
+```java
+public class FolderPermissionVO {
+    private String username;
+    private String folderCode;
+}
+```
+
+### 10.4 PermissionServiceImpl 实现逻辑
+
+| 方法 | 核心逻辑 |
+|------|--------|
+| canEditFolder | ADMIN 角色直接 true → 否则查 cms_folder_permission 表 |
+| grantPermission | 级联子栏目：一次加载所有栏目构建 parentCode→children 映射，内存递归展开 → physicalDeleteBatch + insertBatch |
+| revokePermission | 同上，级联撤销子栏目权限 |
+| batchUpdatePermissions | grant 优先于 revoke（两者重叠时以 grant 为准） → physicalDeleteBatch + insertBatch |
+| getUserPermissions | 查 cms_folder_permission WHERE username=? AND del_flag=0 |
+
+**物理删除策略**：`physicalDeleteBatch` 绕过 `@TableLogic` 软删除，直接 `DELETE FROM`，避免唯一索引 `uk_username_folder(username, folder_code, del_flag)` 冲突
+
+### 10.5 FolderPermissionMapper
+
+```java
+@Mapper
+public interface FolderPermissionMapper extends BaseMapper<FolderPermission> {
+    int physicalDeleteBatch(@Param("username") String username,
+                            @Param("folderCodes") List<String> folderCodes);
+    int insertBatch(@Param("perms") List<FolderPermission> perms);
+}
+```
+
+### 10.6 FolderPermissionController
+
+```java
+@RestController
+@RequestMapping("/api/folder-permissions")
+@RequiredArgsConstructor
+public class FolderPermissionController {
+    @GetMapping
+    public Result<List<FolderPermissionVO>> getUserPermissions(
+            @RequestParam String username);
+
+    @GetMapping("/mine")
+    public Result<List<FolderPermissionVO>> getMyPermissions();
+
+    @PostMapping("/grant")
+    public Result<Void> grant(@Validated @RequestBody PermissionDTO dto);
+
+    @PostMapping("/revoke")
+    public Result<Void> revoke(@Validated @RequestBody PermissionDTO dto);
+
+    @PostMapping("/batch")
+    public Result<Void> batchUpdate(@Validated @RequestBody BatchPermissionDTO dto);
+}
+```
+
+## 11. 版本管理模块
+
+### 11.1 ArticleVersion.java
+
+```java
+@Data
+@TableName("cms_article_version")
+@EqualsAndHashCode(callSuper = true)
+public class ArticleVersion extends BaseEntity {
+    private String articleCode;
+    private String title;
+    private String contentMd;
+    private String status;
+    private Integer versionNumber;
+    private LocalDateTime publishedAt;
+}
+```
+
+### 11.2 ArticleVersionVO
+
+```java
+public class ArticleVersionVO {
+    private Integer versionNumber;
+    private String status;
+    private String contentMd;
+    private String title;
+    private String createdBy;
+    private LocalDateTime createdAt;
+}
+```
+
+### 11.3 版本归档流程
+
+```
+用户编辑文章(PUT) → 检查当前状态
+  ├─ DRAFT → 直接更新字段
+  └─ PUBLISHED/OFFLINE →
+       ① archiveVersion(): 快照写入 cms_article_version
+       ② versionNumber + 1
+       ③ 重置 status=DRAFT, publishedAt=null
+       ④ 更新 title/contentMd/folderCode
+```
+
+### 11.4 ArticleController 版本接口
+
+```java
+@GetMapping("/{articleCode}/versions")
+public Result<List<ArticleVersionVO>> getVersions(@PathVariable String articleCode);
+
+@GetMapping("/{articleCode}/versions/{versionNumber}")
+public Result<ArticleVersionVO> getVersionDetail(@PathVariable String articleCode,
+                                                  @PathVariable Integer versionNumber);
+```
+
+## 12. 数据库迁移
+
+迁移文件位于 `src/main/resources/db/migration/`：
+
+| 文件 | 说明 |
+|------|------|
+| V20260605_001__ddl_user_permission_version.sql | 创建 cms_user、cms_folder_permission、cms_article_version；给 cms_folder 加 root_folder_code；给 cms_article 加 version_number + idx_folder_status 索引 |
+| V20260605_002__dml_init_admin_backfill_folder.sql | 插入 admin 用户（密码 Hyt7SM5@42）；回填 cms_folder.root_folder_code |
+| V20260605_003__ddl_cleanup_redundant_indexes.sql | 清理冗余索引（idx_status、idx_folder_code 等） |
+
+H2 测试 Schema 位于 `src/main/resources/db/schema-h2.sql`，包含全部 7 张表的 H2 兼容 DDL + admin 初始化 INSERT。
+

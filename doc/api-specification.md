@@ -56,8 +56,10 @@ GET /api/folders/root
       "sort": 0,
       "childrenCount": 3,
       "articleCount": 5,
+      "createdBy": "admin",
       "createdAt": "2026-04-28 10:00:00",
-      "updatedAt": "2026-04-28 10:00:00"
+      "updatedAt": "2026-04-28 10:00:00",
+      "updatedBy": "admin"
     }
   ]
 }
@@ -102,8 +104,10 @@ GET /api/folders/{folderCode}/children
         "sort": 0,
         "childrenCount": 2,
         "articleCount": 3,
+        "createdBy": "admin",
         "createdAt": "2026-04-28 10:05:00",
-        "updatedAt": "2026-04-28 10:05:00"
+        "updatedAt": "2026-04-28 10:05:00",
+        "updatedBy": "admin"
       }
     ],
     "articles": [
@@ -117,7 +121,9 @@ GET /api/folders/{folderCode}/children
         "sort": 0,
         "folderTitle": null,
         "createdAt": "2026-04-28 10:30:00",
-        "updatedAt": "2026-04-28 11:00:00"
+        "updatedAt": "2026-04-28 11:00:00",
+        "versionNumber": 2,
+        "updatedBy": "admin"
       }
     ]
   }
@@ -198,8 +204,10 @@ POST /api/folders
     "description": "目录描述信息",
     "sort": 3,
     "childrenCount": null,
+    "createdBy": "admin",
     "createdAt": "2026-04-28 14:00:00",
-    "updatedAt": "2026-04-28 14:00:00"
+    "updatedAt": "2026-04-28 14:00:00",
+    "updatedBy": "admin"
   }
 }
 ```
@@ -256,8 +264,10 @@ PUT /api/folders
     "description": "修改后的描述",
     "sort": 3,
     "childrenCount": null,
+    "createdBy": "admin",
     "createdAt": "2026-04-28 14:00:00",
-    "updatedAt": "2026-04-28 15:00:00"
+    "updatedAt": "2026-04-28 15:00:00",
+    "updatedBy": "admin"
   }
 }
 ```
@@ -302,7 +312,7 @@ DELETE /api/folders/{folderCode}
 | 400 | 目录下存在子目录，无法删除 | 该目录下有 status=1 的子目录 |
 | 400 | 目录下存在文章，无法删除 | 该目录下有未删除的文章 |
 
-**说明**: 仅允许删除空目录（无子目录、无文章）。执行逻辑删除（del_flag 设为 1）。
+**说明**: 仅允许删除空目录（无子目录、无文章）。执行物理删除（deleteById）。
 
 ---
 
@@ -422,7 +432,9 @@ GET /api/articles/{articleCode}
     "sort": 0,
     "folderTitle": "技术文档",
     "createdAt": "2026-04-28 10:30:00",
-    "updatedAt": "2026-04-28 11:00:00"
+    "updatedAt": "2026-04-28 11:00:00",
+    "versionNumber": 2,
+    "updatedBy": "admin"
   }
 }
 ```
@@ -471,7 +483,9 @@ POST /api/articles
     "sort": 1,
     "folderTitle": null,
     "createdAt": "2026-04-28 16:00:00",
-    "updatedAt": "2026-04-28 16:00:00"
+    "updatedAt": "2026-04-28 16:00:00",
+    "versionNumber": 1,
+    "updatedBy": "admin"
   }
 }
 ```
@@ -528,7 +542,9 @@ PUT /api/articles
     "sort": 1,
     "folderTitle": null,
     "createdAt": "2026-04-28 16:00:00",
-    "updatedAt": "2026-04-28 17:00:00"
+    "updatedAt": "2026-04-28 17:00:00",
+    "versionNumber": 2,
+    "updatedBy": "admin"
   }
 }
 ```
@@ -637,7 +653,7 @@ DELETE /api/articles/{articleCode}
 |------|---------|----------|
 | 404 | 文章不存在 | articleCode 对应的文章不存在 |
 
-**说明**: 执行逻辑删除（del_flag=1），同时逻辑删除该文章关联的所有 `cms_attachment_ref` 记录。物理文件和 `cms_attachment` 记录不会被删除（附件独立管理）。
+**说明**: 执行物理删除（deleteById），同时删除该文章的版本历史记录（cms_article_version），并逻辑删除关联的所有 `cms_attachment_ref` 记录。物理文件和 `cms_attachment` 记录不会被删除（附件独立管理）。
 
 ---
 

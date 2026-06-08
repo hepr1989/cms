@@ -107,7 +107,7 @@ logging:
 
 特性：
 - 使用 H2 内存数据库
-- 自动执行 schema.sql 建表
+- 自动执行 schema-h2.sql 建表
 - MODE=MySQL 兼容 MySQL 语法
 
 ## 5. 数据库初始化
@@ -140,12 +140,32 @@ spring:
 ```bash
 java -jar target/cms-0.0.1-SNAPSHOT.jar \
   --spring.datasource.username=$DB_USER \
-  --spring.datasource.password=$DB_PASSWORD
+  --spring.datasource.password=$DB_PASSWORD \
+  --cms.jwt.secret=$JWT_SECRET
 ```
 
-## 6. 附件存储配置
+## 6. JWT 认证配置
 
-### 6.1 本地存储（默认）
+```yaml
+cms:
+  jwt:
+    secret: cms-jwt-secret-key-2026-hepr-internal  # 生产环境务必更换
+    expiration: 86400000                            # token 有效期，默认 24 小时（毫秒）
+```
+
+特性：
+- JWT token 通过 `Authorization: Bearer {token}` 请求头传递
+- 响应头 `X-New-Token` 实现滑动刷新（每次请求自动续期）
+- AuthInterceptor 拦截 `/api/**` 路径，排除 `/api/auth/login` 和 `/uploads/**`
+- 前端 token 持久化到 `localStorage('cms_token')`
+
+**生产环境注意事项**：
+- 必须更换 `cms.jwt.secret` 为高强度随机字符串
+- 建议通过环境变量注入：`--cms.jwt.secret=$JWT_SECRET`
+
+## 7. 附件存储配置
+
+### 7.1 本地存储（默认）
 
 ```yaml
 cms:
@@ -171,7 +191,7 @@ cms:
     └── ...
 ```
 
-### 6.2 MinIO 存储
+### 7.2 MinIO 存储
 
 ```yaml
 cms:
@@ -192,7 +212,7 @@ cms:
 - 上传时自动创建 bucket（如不存在）
 - 文件访问 URL 使用预签名方式（7天有效期）
 
-### 6.3 存储切换注意事项
+### 7.3 存储切换注意事项
 
 | 切换方向 | 注意事项 |
 |---------|---------|
@@ -201,42 +221,50 @@ cms:
 
 建议：首次部署时确定存储方式，避免后续切换。
 
-## 7. SPA Fallback 配置
+## 8. SPA Fallback 配置
 
-### 7.1 实现原理
+### 8.1 实现原理
 
-Spring Boot WebMvcConfig 中注册 ErrorPageRegistrar：
+Spring Boot WebMvcConfig 中定义内部类 SpaErrorController，实现 ErrorController 接口：
 
 ```java
-@Bean
-public ErrorPageRegistrar errorPageRegistrar() {
-    return registry -> registry.addErrorPage(new ErrorPage(
-        HttpStatus.NOT_FOUND, "/index.html"));
+@Controller
+public static class SpaErrorController implements ErrorController {
+    @RequestMapping("/error")
+    public Object handleError() {
+        ClassPathResource indexHtml = new ClassPathResource("static/index.html");
+        if (indexHtml.exists()) {
+            return "forward:/index.html";
+        }
+        return Result.fail(404, "资源不存在");
+    }
 }
 ```
 
-### 7.2 路由规则
+当请求路径不匹配任何 API 或静态资源时，Spring Boot 将请求转发到 `/error`，SpaErrorController 捕获并转发到 `index.html`，由 React Router 接管路由。
+
+### 8.2 路由规则
 
 | URL 模式 | 处理方式 |
 |---------|---------|
-| `/api/**` | Spring Boot Controller 处理 |
+| `/api/**` | Spring Boot Controller 处理（AuthInterceptor 校验 JWT） |
 | `/uploads/**` | 静态资源映射到本地文件系统 |
 | `/assets/**`, `/index.html`, etc. | 前端静态资源 |
 | 其他路径 (如 `/admin/folder/xxx`) | 404 → 转发到 `/index.html` → React Router 处理 |
 
-### 7.3 验证方式
+### 8.3 验证方式
 
 ```bash
 # 启动后验证
 curl http://localhost:8080/                    # 返回 index.html
 curl http://localhost:8080/admin               # 返回 index.html（SPA Fallback）
 curl http://localhost:8080/portal/article/123  # 返回 index.html（SPA Fallback）
-curl http://localhost:8080/api/folders/root    # 返回 JSON 数据
+curl http://localhost:8080/api/folders/root    # 返回 JSON 数据（需携带 JWT token）
 ```
 
-## 8. 运维操作
+## 9. 运维操作
 
-### 8.1 启动
+### 9.1 启动
 
 ```bash
 # 前台启动
@@ -249,7 +277,7 @@ nohup java -jar target/cms-0.0.1-SNAPSHOT.jar > cms.log 2>&1 &
 java -jar target/cms-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
 ```
 
-### 8.2 停止
+### 9.2 停止
 
 ```bash
 # 查找进程
@@ -259,7 +287,7 @@ ps aux | grep cms
 kill -15 <PID>
 ```
 
-### 8.3 日志
+### 9.3 日志
 
 ```bash
 # 实时查看日志
@@ -269,21 +297,31 @@ tail -f cms.log
 grep -i error cms.log
 ```
 
-### 8.4 健康检查
+### 9.4 健康检查
 
 ```bash
 # 检查服务是否运行
-curl http://localhost:8080/api/folders/root
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
 
 # 预期返回
-{"code":200,"message":"ok","data":[...]}
+{"code":200,"message":"ok","data":{"token":"...","username":"admin","role":"ADMIN"}}
 ```
 
-## 9. 部署后验证
+## 10. 部署后验证
 
-### 9.1 后端 API 验证
+### 10.1 后端 API 验证
 
 启动 Spring Boot 后，通过 curl 或 Postman 逐接口验证：
+
+**认证模块**：
+
+| 验证项 | 操作 | 预期结果 |
+|-------|------|---------|
+| 登录 | `POST /api/auth/login {username, password}` | 返回 token + username + role |
+| 获取当前用户 | `GET /api/auth/me` (携带 Bearer token) | 返回当前用户信息 |
+| 无 token 访问 | `GET /api/folders/root` (不带 Authorization) | 返回 401 |
 
 **目录模块**：
 
@@ -326,12 +364,14 @@ curl http://localhost:8080/api/folders/root
 | 关键词匹配内容 | `GET /api/search?keyword=配置` | 返回内容含"配置"的文章，含 contentSnippet |
 | portalMode 过滤 | `GET /api/search?keyword=xxx&portalMode=true` | 仅返回 PUBLISHED 状态文章 |
 
-### 9.2 前端功能验证
+### 10.2 前端功能验证
 
 `npm run dev` 启动开发服务器后，逐项验证：
 
 | 验证项 | 操作 | 预期结果 |
 |-------|------|---------|
+| 登录页 | 访问 /login | 显示登录表单 |
+| 登录验证 | 输入用户名密码登录 | 成功后跳转管理后台 |
 | 布局渲染 | 访问 http://localhost:5173 | HeaderBar + Sidebar + ContentArea 正常显示 |
 | 搜索功能 | 在搜索框输入关键词 | 300ms 防抖后出现下拉结果，点击跳转 |
 | 树懒加载 | 初始仅加载根级目录 | 展开某目录加载子节点，收起再展开不重新请求 |
@@ -342,9 +382,11 @@ curl http://localhost:8080/api/folders/root
 | 状态流转 | 新建→发布→编辑→变草稿→重新发布 | ArticleStatusBadge 颜色正确切换 |
 | 拖拽排序 | 同层级内拖拽目录/文章 | 排序成功，跨层级被阻止 |
 | 前台展示 | 访问 /portal | 仅显示 PUBLISHED 文章 + 正常目录，无操作按钮 |
-| 元数据栏 | 查看任意内容页 | 底部显示"最近修改"时间 + 分享按钮 |
+| 元数据栏 | 查看任意内容页 | 底部显示"最近修改"时间 + 修改人 |
+| 用户管理 | 访问 /admin/users | 显示用户列表，可新增/编辑/删除用户 |
+| 权限配置 | 访问 /admin/permissions | 可为用户配置栏目权限 |
 
-### 9.3 集成验证
+### 10.3 集成验证
 
 前后端合并部署后的端到端验证：
 
@@ -364,11 +406,12 @@ java -jar target/cms-0.0.1-SNAPSHOT.jar
 | 验证项 | 操作 | 预期结果 |
 |-------|------|---------|
 | 首页访问 | 访问 / | 重定向到 /portal |
+| 登录验证 | 未登录访问 /admin | 自动跳转到 /login 登录页 |
 | SPA 路由 | 直接访问 /admin/folder/xxx | 不返回 404，正常渲染页面 |
 | API 代理 | 前端调用 /api/* | 正确转发到后端 Controller |
 | 附件访问 | 访问 /uploads/2026-04/xxx.png | 返回图片文件 |
 
-### 9.4 响应式验证
+### 10.4 响应式验证
 
 使用浏览器 DevTools 切换设备尺寸：
 
@@ -379,13 +422,13 @@ java -jar target/cms-0.0.1-SNAPSHOT.jar
 | Mobile 布局 | < 768px | 汉堡菜单触发 Sidebar，搜索框收缩，编辑器标签页模式 |
 | 树节点交互 | Mobile | 点击展开/选中，无 hover 操作按钮 |
 
-## 10. 常见问题
+## 11. 常见问题
 
 ### Q1: 前端页面刷新 404
 
 **原因**：SPA Fallback 未生效。
 
-**解决**：确认 WebMvcConfig 中的 ErrorPageRegistrar 已正确注册，且 static 目录下存在 index.html。
+**解决**：确认 WebMvcConfig 中的 SpaErrorController 内部类已正确定义，且 static 目录下存在 index.html。
 
 ### Q2: 附件上传后无法访问
 
@@ -407,7 +450,7 @@ java -jar target/cms-0.0.1-SNAPSHOT.jar
 
 ### Q4: 数据库连接失败
 
-**原因**：MySQL 未启动或连接信息错误。
+**原因**：MySQL 未启动或连接信息不正确。
 
 **解决**：
 1. 确认 MySQL 服务已启动
@@ -420,3 +463,13 @@ java -jar target/cms-0.0.1-SNAPSHOT.jar
 **原因**：CorsConfig 仅在 dev profile 下生效。
 
 **解决**：确认启动时激活了 dev profile，或检查 `--spring.profiles.active=dev` 是否传入。
+
+### Q6: API 请求返回 401
+
+**原因**：JWT token 过期或未携带。
+
+**解决**：
+1. 确认已登录并获取了 token
+2. 确认请求头包含 `Authorization: Bearer {token}`
+3. 检查 `cms.jwt.expiration` 配置是否合理
+4. 确认 AuthInterceptor 的排除路径配置正确

@@ -3,10 +3,14 @@ import type { ArticleVO } from '@/types';
 import { ArticleStatus } from '@/types';
 import * as articleApi from '@/api/article';
 
+// 模块级 Promise 缓存，防止 StrictMode 二次挂载发出重复请求
+const loadArticlePromises = new Map<string, Promise<void>>();
+
 interface ArticleState {
   currentArticle: ArticleVO | null;
   isDirty: boolean;
   isSaving: boolean;
+  isLoading: boolean;
   originalContent: string;
 
   initNewArticle: (folderCode: string) => void;
@@ -23,6 +27,7 @@ export const useArticleStore = create<ArticleState>((set, get) => ({
   currentArticle: null,
   isDirty: false,
   isSaving: false,
+  isLoading: false,
   originalContent: '',
 
   initNewArticle: (folderCode: string) => set({
@@ -41,13 +46,28 @@ export const useArticleStore = create<ArticleState>((set, get) => ({
     originalContent: '',
   }),
 
-  loadArticle: async (articleCode: string) => {
-    const article = await articleApi.getArticle(articleCode) as unknown as ArticleVO;
-    set({
-      currentArticle: article,
-      isDirty: false,
-      originalContent: article.contentMd || '',
-    });
+  loadArticle: (articleCode: string) => {
+    // 同一文章正在加载，复用已有 Promise（防止 StrictMode 二次挂载重复请求）
+    const existing = loadArticlePromises.get(articleCode);
+    if (existing) return existing;
+
+    const promise = (async () => {
+      set({ isLoading: true });
+      try {
+        const article = await articleApi.getArticle(articleCode) as unknown as ArticleVO;
+        set({
+          currentArticle: article,
+          isDirty: false,
+          originalContent: article.contentMd || '',
+        });
+      } finally {
+        set({ isLoading: false });
+        loadArticlePromises.delete(articleCode);
+      }
+    })();
+
+    loadArticlePromises.set(articleCode, promise);
+    return promise;
   },
 
   setContent: (content: string) => {

@@ -3,6 +3,11 @@ import { Table, Button, Modal, Form, Input, Select, Switch, message, Space, Popc
 import { PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import type { UserVO, UserCreateDTO, UserUpdateDTO } from '@/types/auth';
 import * as userApi from '@/api/user';
+import { formatDateTime } from '@/utils/constants';
+
+// 模块级缓存，防止 StrictMode 二次挂载时重复请求
+let usersLoading = false;
+let usersCache: UserVO[] | null = null;
 
 // 密码复杂度：至少8位，包含大小写字母、数字、特殊字符
 const PWD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>\/?]).{8,}$/;
@@ -35,13 +40,21 @@ export default function UserManagePage() {
   const [form] = Form.useForm();
 
   const loadUsers = async () => {
+    if (usersLoading) {
+      // 正在加载，用缓存数据重放（StrictMode 二次挂载场景）
+      if (usersCache) setUsers(usersCache);
+      return;
+    }
+    usersLoading = true;
     setLoading(true);
     try {
       const data = await userApi.listUsers() as unknown as UserVO[];
+      usersCache = data;
       setUsers(data);
     } catch (err: any) {
       message.error(err.message || '加载用户列表失败');
     } finally {
+      usersLoading = false;
       setLoading(false);
     }
   };
@@ -137,7 +150,7 @@ export default function UserManagePage() {
       title: '状态', dataIndex: 'status', key: 'status',
       render: (v: number) => v === 1 ? '启用' : '禁用',
     },
-    { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt' },
+    { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', render: (v: string) => formatDateTime(v) },
     {
       title: '操作', key: 'action',
       render: (_: any, record: UserVO) => (

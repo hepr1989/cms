@@ -7,6 +7,12 @@ import * as userApi from '@/api/user';
 import { batchUpdatePermissions, getUserPermissions } from '@/api/permission';
 import type { UserVO } from '@/types/auth';
 
+// 模块级缓存，防止 StrictMode 二次挂载时重复请求
+let permUsersLoading = false;
+let permUsersCache: UserVO[] | null = null;
+let foldersLoading = false;
+let foldersCache: FolderVO[] | null = null;
+
 interface TreeNode {
   key: string;
   title: string;
@@ -56,23 +62,38 @@ export default function PermissionConfigPage() {
   }, []);
 
   const loadUsers = async () => {
+    if (permUsersLoading) {
+      if (permUsersCache) setUsers(permUsersCache.filter(u => u.role !== 'ADMIN'));
+      return;
+    }
+    permUsersLoading = true;
     try {
       const data = await userApi.listUsers() as unknown as UserVO[];
+      permUsersCache = data;
       setUsers(data.filter(u => u.role !== 'ADMIN'));
     } catch {
       message.error('加载用户列表失败');
+    } finally {
+      permUsersLoading = false;
     }
   };
 
   /** 一次 API 调用获取所有栏目，前端构建树 */
   const loadTree = async () => {
+    if (foldersLoading) {
+      if (foldersCache) setTreeData(buildTreeFromFlat(foldersCache));
+      return;
+    }
+    foldersLoading = true;
     setTreeLoading(true);
     try {
       const folders = await getAllFoldersFlat() as unknown as FolderVO[];
+      foldersCache = folders;
       setTreeData(buildTreeFromFlat(folders));
     } catch {
       message.error('加载栏目树失败');
     } finally {
+      foldersLoading = false;
       setTreeLoading(false);
     }
   };

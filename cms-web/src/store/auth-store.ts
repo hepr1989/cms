@@ -5,6 +5,7 @@ import * as authApi from '@/api/auth';
 interface AuthState {
   token: string | null;
   user: UserVO | null;
+  userLoading: boolean;
 
   setToken: (token: string) => void;
   loadUser: () => Promise<void>;
@@ -17,6 +18,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => ({
   token: localStorage.getItem('cms_token'),
   user: null,
+  userLoading: false,
 
   setToken: (token: string) => {
     localStorage.setItem('cms_token', token);
@@ -24,11 +26,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loadUser: async () => {
+    if (get().userLoading) return;
+    set({ userLoading: true });
     try {
       const user = await authApi.getMe();
       set({ user: user as unknown as UserVO });
     } catch {
       get().logout();
+    } finally {
+      set({ userLoading: false });
     }
   },
 

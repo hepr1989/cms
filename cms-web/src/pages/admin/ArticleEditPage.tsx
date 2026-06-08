@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Input, Dropdown, message, Modal, Select, Typography } from 'antd';
 import { ArrowLeftOutlined, SaveOutlined, SendOutlined, DownOutlined, HistoryOutlined } from '@ant-design/icons';
@@ -12,6 +12,7 @@ import { deleteArticle } from '@/api/article';
 import { getMyPermissions } from '@/api/permission';
 import * as versionApi from '@/api/version';
 import { ArticleStatus } from '@/types';
+import { formatDateTime } from '@/utils/constants';
 import type { ArticleVersionVO } from '@/types/version';
 import type { TreeDataNode } from '@/types';
 
@@ -58,6 +59,7 @@ export default function ArticleEditPage() {
   const [versions, setVersions] = useState<ArticleVersionVO[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [versionContent, setVersionContent] = useState<ArticleVersionVO | null>(null);
+  const versionsLoadingRef = useRef<string | null>(null);
 
   // Permission state
   const [canEdit, setCanEdit] = useState(true);
@@ -106,11 +108,15 @@ export default function ArticleEditPage() {
 
   // Load versions
   useEffect(() => {
-    if (articleCode && articleCode !== 'new') {
-      versionApi.getVersions(articleCode).then(data => {
-        setVersions((data as unknown as ArticleVersionVO[]) || []);
-      }).catch(() => {});
-    }
+    if (!articleCode || articleCode === 'new') return;
+    // 防止 StrictMode 二次挂载或 versionNumber 变化时重复请求
+    if (versionsLoadingRef.current === articleCode) return;
+    versionsLoadingRef.current = articleCode;
+    versionApi.getVersions(articleCode).then(data => {
+      setVersions((data as unknown as ArticleVersionVO[]) || []);
+    }).catch(() => {}).finally(() => {
+      versionsLoadingRef.current = null;
+    });
   }, [articleCode, currentArticle?.versionNumber]);
 
   useEffect(() => {
@@ -280,7 +286,7 @@ export default function ArticleEditPage() {
           padding: '8px 16px', background: '#fffbe6', borderBottom: '1px solid #ffe58f',
           fontSize: 13, color: '#874d00',
         }}>
-          修改人：{versionContent.createdBy} &nbsp;&nbsp; 修改时间：{versionContent.createdAt}
+          修改人：{versionContent.createdBy} &nbsp;&nbsp; 修改时间：{formatDateTime(versionContent.createdAt)}
           &nbsp;&nbsp;（历史版本，只读模式）
         </div>
       )}

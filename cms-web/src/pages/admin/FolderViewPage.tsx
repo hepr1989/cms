@@ -10,6 +10,7 @@ import { getChildren, getFolder } from '@/api/folder';
 import { getMyPermissions } from '@/api/permission';
 import { importPdf } from '@/api/article';
 import ArticleStatusBadge from '@/components/article/ArticleStatusBadge';
+import { formatDateTime } from '@/utils/constants';
 import type { FolderVO, ArticleVO, FolderTreeVO, TreeDataNode } from '@/types';
 
 function findNode(nodes: TreeDataNode[], key: string): TreeDataNode | null {
@@ -187,7 +188,7 @@ export default function FolderViewPage() {
                 <Button type="link" onClick={() => navigate(`/admin/folder/${f.folderCode}`)}>查看</Button>
               </div>
             }>
-              <List.Item.Meta avatar={<FolderOutlined style={{ fontSize: 20, color: 'var(--color-primary)' }} />} title={f.title} description={f.updatedBy ? `最后修改: ${f.updatedBy} ${f.updatedAt || ''}` : (f.description || undefined)} />
+              <List.Item.Meta avatar={<FolderOutlined style={{ fontSize: 20, color: 'var(--color-primary)' }} />} title={f.title} description={f.updatedAt ? `最近修改: ${formatDateTime(f.updatedAt)}  修改人: ${f.updatedBy}` : (f.description || undefined)} />
             </List.Item>
           )}
         />
@@ -207,7 +208,7 @@ export default function FolderViewPage() {
               <List.Item.Meta
                 avatar={<FileTextOutlined style={{ fontSize: 20 }} />}
                 title={a.title}
-                description={a.updatedBy ? `最后修改: ${a.updatedBy} ${a.updatedAt || ''}` : undefined}
+                description={a.updatedAt ? `最近修改: ${formatDateTime(a.updatedAt)}  修改人: ${a.updatedBy}` : undefined}
               />
             </List.Item>
           )}
@@ -216,7 +217,7 @@ export default function FolderViewPage() {
 
       <div className="metadata-bar">
         <span className="meta-time">
-          最近修改: {folderInfo?.updatedAt || '-'}
+          最近修改: {formatDateTime(folderInfo?.updatedAt) || '-'}
           {folderInfo?.updatedBy && <span style={{ marginLeft: 12 }}>修改人: {folderInfo.updatedBy}</span>}
         </span>
       </div>

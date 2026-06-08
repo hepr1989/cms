@@ -59,7 +59,7 @@ export default function FolderBrowsePage() {
           </div>
         </div>
       )}
-      <MetadataBar updatedAt={folderInfo?.updatedAt || null} updatedBy={folderInfo?.updatedBy} showShare={false} />
+      <MetadataBar updatedAt={folderInfo?.updatedAt || null} updatedBy={folderInfo?.updatedBy} />
     </div>
   );
 }

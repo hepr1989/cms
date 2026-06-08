@@ -11,6 +11,7 @@ interface TreeState {
   expandedKeys: string[];
   selectedKey: string | null;
   loadingKeys: string[];
+  rootLoading: boolean;
   mode: TreeMode;
 
   setMode: (mode: TreeMode) => void;
@@ -134,12 +135,103 @@ function collectUnloadedFolderKeys(nodes: TreeDataNode[], loadedKeys: string[]):
   return result;
 }
 
+// 模块级 Promise 缓存，防止 StrictMode 二次挂载发出重复请求
+const syncSelectionPromises = new Map<string, Promise<void>>();
+
+/** syncSelection 的实际执行逻辑，提取为独立函数以便在 store 外部定义 Promise 缓存 */
+async function doSyncSelection(key: string, folderCode?: string) {
+  const store = useTreeStore.getState();
+  if (store.selectedKey === key) return;
+
+  // 确保根节点已加载
+  if (store.treeData.length === 0) {
+    await store.loadRootNodes();
+  }
+
+  // 先检查目标是否已在树中可见
+  let path = findPathToNode(useTreeStore.getState().treeData, key);
+
+  if (!path) {
+    // 用 getAllFoldersFlat 一次获取所有栏目，在内存中计算父链
+    try {
+      const allFolders = await getAllFoldersFlat() as unknown as FolderVO[];
+      const folderMap = new Map<string, FolderVO>();
+      for (const f of allFolders) {
+        folderMap.set(f.folderCode, f);
+      }
+
+      // 确定目标所在栏目
+      let targetFolderCode: string | null = null;
+      if (key.startsWith('folder-')) {
+        targetFolderCode = key.replace('folder-', '');
+      } else if (key.startsWith('article-')) {
+        // 优先用调用者传入的 folderCode（F5 刷新时文章节点不在树中）
+        if (folderCode) {
+          targetFolderCode = folderCode;
+        } else {
+          const articleNode = findNode(useTreeStore.getState().treeData, key);
+          if (articleNode?.parentKey && articleNode.parentKey.startsWith('folder-')) {
+            targetFolderCode = articleNode.parentKey.replace('folder-', '');
+          }
+        }
+      }
+
+      if (targetFolderCode && folderMap.has(targetFolderCode)) {
+        // 通过 parentFolderCode 向上走，构建从根到目标的路径
+        const pathFolderCodes: string[] = [];
+        let current = targetFolderCode;
+        const visited = new Set<string>();
+        while (current && current !== '-1' && !visited.has(current)) {
+          visited.add(current);
+          pathFolderCodes.unshift(current);
+          const folder = folderMap.get(current);
+          current = folder?.parentFolderCode ?? '-1';
+        }
+
+        // 只加载路径上的栏目子节点（而非全树）
+        for (const code of pathFolderCodes) {
+          const folderKey = `folder-${code}`;
+          if (!useTreeStore.getState().loadedKeys.includes(folderKey)) {
+            await useTreeStore.getState().loadChildren(folderKey);
+          }
+        }
+      }
+    } catch {
+      // 获取栏目列表失败，忽略
+    }
+
+    // 重新查找路径
+    path = findPathToNode(useTreeStore.getState().treeData, key);
+  }
+
+  if (!path) return;
+
+  // 展开路径上的所有目录
+  for (const folderKey of path) {
+    const state = useTreeStore.getState();
+    if (!state.expandedKeys.includes(folderKey)) {
+      useTreeStore.setState(s => { s.expandedKeys.push(folderKey); });
+    }
+    if (!state.loadedKeys.includes(folderKey)) {
+      await useTreeStore.getState().loadChildren(folderKey);
+    }
+  }
+
+  useTreeStore.setState({ selectedKey: key });
+
+  const node = findNode(useTreeStore.getState().treeData, key);
+  if (node) {
+    document.title = `${node.title} - CMS 知识库`;
+  }
+}
+
 export const useTreeStore = create<TreeState>()(immer((set, get) => ({
   treeData: [],
   loadedKeys: [],
   expandedKeys: [],
   selectedKey: null,
   loadingKeys: [],
+  rootLoading: false,
   mode: 'admin' as TreeMode,
 
   setMode: (mode: TreeMode) => {
@@ -152,11 +244,16 @@ export const useTreeStore = create<TreeState>()(immer((set, get) => ({
 
   loadRootNodes: async () => {
     // 防止重复加载（页面刷新时 syncSelection 和 FolderTree 可能同时调用）
-    if (get().treeData.length > 0) return;
-    const portalMode = get().mode === 'portal';
-    const folders = await getRootFolders(portalMode) as unknown as FolderVO[];
-    const nodes = folders.map(f => folderToNode(f, '-1'));
-    set({ treeData: nodes });
+    if (get().treeData.length > 0 || get().rootLoading) return;
+    set(state => { state.rootLoading = true; });
+    try {
+      const portalMode = get().mode === 'portal';
+      const folders = await getRootFolders(portalMode) as unknown as FolderVO[];
+      const nodes = folders.map(f => folderToNode(f, '-1'));
+      set({ treeData: nodes });
+    } finally {
+      set(state => { state.rootLoading = false; });
+    }
   },
 
   loadChildren: async (folderKey: string) => {
@@ -287,87 +384,17 @@ export const useTreeStore = create<TreeState>()(immer((set, get) => ({
   },
 
   /** 根据目标 key 自动展开父级路径并选中该节点 */
-  syncSelection: async (key: string, folderCode?: string) => {
-    if (get().selectedKey === key) return;
+  syncSelection: (key: string, folderCode?: string) => {
+    if (get().selectedKey === key) return Promise.resolve();
 
-    // 确保根节点已加载
-    if (get().treeData.length === 0) {
-      await get().loadRootNodes();
-    }
+    // 同一节点正在同步，复用已有 Promise（防止 StrictMode 二次挂载重复请求）
+    const cacheKey = `${key}|${folderCode || ''}`;
+    const existing = syncSelectionPromises.get(cacheKey);
+    if (existing) return existing;
 
-    // 先检查目标是否已在树中可见
-    let path = findPathToNode(get().treeData, key);
-
-    if (!path) {
-      // 用 getAllFoldersFlat 一次获取所有栏目，在内存中计算父链
-      try {
-        const allFolders = await getAllFoldersFlat() as unknown as FolderVO[];
-        const folderMap = new Map<string, FolderVO>();
-        for (const f of allFolders) {
-          folderMap.set(f.folderCode, f);
-        }
-
-        // 确定目标所在栏目
-        let targetFolderCode: string | null = null;
-        if (key.startsWith('folder-')) {
-          targetFolderCode = key.replace('folder-', '');
-        } else if (key.startsWith('article-')) {
-          // 优先用调用者传入的 folderCode（F5 刷新时文章节点不在树中）
-          if (folderCode) {
-            targetFolderCode = folderCode;
-          } else {
-            const articleNode = findNode(get().treeData, key);
-            if (articleNode?.parentKey && articleNode.parentKey.startsWith('folder-')) {
-              targetFolderCode = articleNode.parentKey.replace('folder-', '');
-            }
-          }
-        }
-
-        if (targetFolderCode && folderMap.has(targetFolderCode)) {
-          // 通过 parentFolderCode 向上走，构建从根到目标的路径
-          const pathFolderCodes: string[] = [];
-          let current = targetFolderCode;
-          const visited = new Set<string>();
-          while (current && current !== '-1' && !visited.has(current)) {
-            visited.add(current);
-            pathFolderCodes.unshift(current);
-            const folder = folderMap.get(current);
-            current = folder?.parentFolderCode ?? '-1';
-          }
-
-          // 只加载路径上的栏目子节点（而非全树）
-          for (const code of pathFolderCodes) {
-            const folderKey = `folder-${code}`;
-            if (!get().loadedKeys.includes(folderKey)) {
-              await get().loadChildren(folderKey);
-            }
-          }
-        }
-      } catch {
-        // 获取栏目列表失败，忽略
-      }
-
-      // 重新查找路径
-      path = findPathToNode(get().treeData, key);
-    }
-
-    if (!path) return;
-
-    // 展开路径上的所有目录
-    for (const folderKey of path) {
-      if (!get().expandedKeys.includes(folderKey)) {
-        set(state => { state.expandedKeys.push(folderKey); });
-      }
-      if (!get().loadedKeys.includes(folderKey)) {
-        await get().loadChildren(folderKey);
-      }
-    }
-
-    set({ selectedKey: key });
-
-    const node = findNode(get().treeData, key);
-    if (node) {
-      document.title = `${node.title} - CMS 知识库`;
-    }
+    const promise = doSyncSelection(key, folderCode);
+    syncSelectionPromises.set(cacheKey, promise);
+    promise.finally(() => syncSelectionPromises.delete(cacheKey));
+    return promise;
   },
 })));

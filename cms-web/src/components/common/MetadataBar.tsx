@@ -1,5 +1,6 @@
 import { Button } from 'antd';
 import { ShareAltOutlined, PlusOutlined } from '@ant-design/icons';
+import { formatDateTime } from '@/utils/constants';
 
 interface Props {
   updatedAt: string | null;
@@ -10,11 +11,11 @@ interface Props {
   onAddArticle?: () => void;
 }
 
-export default function MetadataBar({ updatedAt, updatedBy, showShare = true, showAdd = false, onAddFolder, onAddArticle }: Props) {
+export default function MetadataBar({ updatedAt, updatedBy, showShare = false, showAdd = false, onAddFolder, onAddArticle }: Props) {
   return (
     <div className="metadata-bar">
       <span className="meta-time">
-        最近修改: {updatedAt || '-'}
+        最近修改: {formatDateTime(updatedAt) || '-'}
         {updatedBy && <span style={{ marginLeft: 12 }}>修改人: {updatedBy}</span>}
       </span>
       <div className="meta-actions">

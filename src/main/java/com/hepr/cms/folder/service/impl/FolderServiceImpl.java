@@ -67,7 +67,8 @@ public class FolderServiceImpl implements FolderService {
             vo.setChildrenCount(countMap.getOrDefault(f.getFolderCode(), 0));
             vo.setArticleCount(articleCountMap.getOrDefault(f.getFolderCode(), 0));
             return vo;
-        }).collect(Collectors.toList());
+        }).filter(vo -> !portalMode || vo.getChildrenCount() > 0 || vo.getArticleCount() > 0)
+          .collect(Collectors.toList());
     }
 
     @Override
@@ -93,7 +94,8 @@ public class FolderServiceImpl implements FolderService {
             vo.setChildrenCount(finalCountMap.getOrDefault(f.getFolderCode(), 0));
             vo.setArticleCount(finalArticleCountMap.getOrDefault(f.getFolderCode(), 0));
             return vo;
-        }).collect(Collectors.toList());
+        }).filter(vo -> !portalMode || vo.getChildrenCount() > 0 || vo.getArticleCount() > 0)
+          .collect(Collectors.toList());
 
         List<ArticleVO> articleVOs = articleService.listByFolderCode(parentFolderCode, portalMode);
 

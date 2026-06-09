@@ -376,13 +376,13 @@ public class ArticleServiceImpl implements ArticleService {
     public List<ArticleVersionVO> getVersions(String articleCode) {
         List<ArticleVersion> versions = articleVersionMapper.selectList(
                 new LambdaQueryWrapper<ArticleVersion>()
+                        .select(ArticleVersion.class, info -> !"content_md".equals(info.getColumn()))
                         .eq(ArticleVersion::getArticleCode, articleCode)
                         .orderByDesc(ArticleVersion::getVersionNumber));
         return versions.stream().map(v -> {
             ArticleVersionVO vo = new ArticleVersionVO();
             vo.setVersionNumber(v.getVersionNumber());
             vo.setStatus(v.getStatus());
-            vo.setContentMd(v.getContentMd());
             vo.setTitle(v.getTitle());
             vo.setCreatedBy(v.getCreatedBy());
             vo.setCreatedAt(v.getCreatedAt());

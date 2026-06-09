@@ -119,6 +119,6 @@ CREATE TABLE IF NOT EXISTS cms_article_version (
 );
 CREATE INDEX IF NOT EXISTS idx_av_article_version ON cms_article_version (article_code, version_number);
 
--- 初始化 admin 用户 (密码: Hyt7SM5@42)
+-- 初始化 admin 用户 (密码: Admin@123，前端 SHA-256 哈希后传输)
 INSERT INTO cms_user (username, password, role, status, created_by, updated_by)
-VALUES ('admin', '$2a$10$JemZuXMrcDF.O1mZySOXh.QZdBZ5M8PAsVekVe/5MPXlCXy8Xa/fK', 'ADMIN', 1, 'system', 'system');
+VALUES ('admin', '$2a$10$bCIHBh9NmWUFBMCFSSYJ.uFgKKpT8S5fId9ubmBjRUEtWqoCkwJDO', 'ADMIN', 1, 'system', 'system');

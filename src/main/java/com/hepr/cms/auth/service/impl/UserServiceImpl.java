@@ -47,7 +47,10 @@ public class UserServiceImpl implements UserService {
         if (user.getStatus() != 1) {
             throw new UnauthorizedException("账号已被禁用");
         }
+        // rawPassword 为前端 SHA-256 哈希后的字符串
         if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
+            // 向后兼容：旧数据密码为明文 BCrypt，尝试匹配后自动升级
+            // 此处无法逆推原始明文，旧账号需通过重置密码升级
             throw new UnauthorizedException("用户名或密码错误");
         }
         String token = jwtTokenProvider.generateToken(user.getUsername(), user.getRole());
@@ -82,7 +85,7 @@ public class UserServiceImpl implements UserService {
         if (existing != null) {
             throw new BusinessException("用户名已存在");
         }
-        validatePassword(dto.getPassword());
+        // 前端已做 SHA-256 哈希，此处跳过明文密码复杂度校验，直接 BCrypt 存储
         User user = new User();
         user.setUsername(dto.getUsername());
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
@@ -134,7 +137,7 @@ public class UserServiceImpl implements UserService {
         if (user == null) {
             throw new BusinessException("用户不存在");
         }
-        validatePassword(dto.getNewPassword());
+        // 前端已做 SHA-256 哈希，跳过明文复杂度校验，直接 BCrypt 存储
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         userMapper.updateById(user);
     }

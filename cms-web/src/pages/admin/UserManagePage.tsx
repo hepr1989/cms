@@ -4,6 +4,7 @@ import { PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import type { UserVO, UserCreateDTO, UserUpdateDTO } from '@/types/auth';
 import * as userApi from '@/api/user';
 import { formatDateTime } from '@/utils/constants';
+import { hashPassword } from '@/utils/crypto';
 
 // 模块级缓存，防止 StrictMode 二次挂载时重复请求
 let usersLoading = false;
@@ -86,9 +87,10 @@ export default function UserManagePage() {
         await userApi.updateUser(dto);
         message.success('更新成功');
       } else {
+        const hashed = await hashPassword(values.password);
         const dto: UserCreateDTO = {
           username: values.username,
-          password: values.password,
+          password: hashed,
           role: values.role,
         };
         await userApi.createUser(dto);
@@ -134,7 +136,8 @@ export default function UserManagePage() {
           return Promise.reject();
         }
         try {
-          await userApi.resetPassword(username, { newPassword: el.value });
+          const hashed = await hashPassword(el.value);
+          await userApi.resetPassword(username, { newPassword: hashed });
           message.success('密码重置成功');
         } catch (err: any) {
           message.error(err.message || '重置失败');

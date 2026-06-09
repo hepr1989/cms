@@ -96,7 +96,7 @@ function insertMarkdownToContent(md: string) {
 }
 
 /** ============ 主组件 ============ */
-export default function MarkdownEditor({ readOnly = false }: { readOnly?: boolean } = {}) {
+export default function MarkdownEditor({ readOnly = false, value }: { readOnly?: boolean; value?: string } = {}) {
   const article = useArticleStore(s => s.currentArticle);
   const setContent = useArticleStore(s => s.setContent);
   const isMobile = useUIStore(s => s.isMobile);
@@ -104,9 +104,12 @@ export default function MarkdownEditor({ readOnly = false }: { readOnly?: boolea
   const toggleOutline = useCallback(() => setShowOutline(v => !v), []);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
 
+  // 外部传入 value 时优先使用（历史版本预览场景）
+  const contentMd = value !== undefined ? value : (article?.contentMd || '');
+
   const headings = useMemo(
-    () => extractHeadings(article?.contentMd || ''),
-    [article?.contentMd]
+    () => extractHeadings(contentMd),
+    [contentMd]
   );
 
   /** 通用图片上传（按钮上传 + 粘贴共用） */
@@ -332,7 +335,7 @@ export default function MarkdownEditor({ readOnly = false }: { readOnly?: boolea
     }
 
     const textarea = el.querySelector('textarea');
-    const content = article?.contentMd || '';
+    const content = contentMd;
     if (!textarea || !content) return;
 
     const lines = content.split('\n');
@@ -352,14 +355,14 @@ export default function MarkdownEditor({ readOnly = false }: { readOnly?: boolea
       }
       charPos += lines[i].length + 1;
     }
-  }, [article?.contentMd]);
+  }, [contentMd]);
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
       <div data-color-mode="light" style={{ flex: 1, minHeight: 0 }} ref={editorRef}>
         <MDEditor
-          value={article?.contentMd || ''}
-          onChange={val => !readOnly && setContent(val || '')}
+          value={contentMd}
+          onChange={val => !readOnly && value === undefined && setContent(val || '')}
           preview={readOnly ? 'preview' : (isMobile ? 'edit' : 'live')}
           height="100%"
           visibleDragbar={false}

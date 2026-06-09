@@ -9,12 +9,12 @@
 
 -- ---------------------------------------------------------------------
 -- 1. 初始化 admin 用户
--- 密码明文: Hyt7SM5@42
+-- 密码明文: Admin@123（前端 SHA-256 哈希后传输，BCrypt 包裹 SHA-256）
 -- BCrypt 哈希: 由 BCryptPasswordEncoder 生成（strength=10）
 -- 注意: 此哈希值固定，生产环境如需修改密码请通过管理界面重置
 -- ---------------------------------------------------------------------
 INSERT INTO cms_user (username, password, role, status, created_by, updated_by)
-VALUES ('admin', '$2a$10$JemZuXMrcDF.O1mZySOXh.QZdBZ5M8PAsVekVe/5MPXlCXy8Xa/fK', 'ADMIN', 1, 'system', 'system');
+VALUES ('admin', '$2a$10$OnwR7QqLAE5.lRX0N/QEpuSXExznvdMNXRy2lqG.PhiNwqDOZO6OC', 'ADMIN', 1, 'system', 'system');
 
 -- ---------------------------------------------------------------------
 -- 2. 回填 cms_folder.root_folder_code

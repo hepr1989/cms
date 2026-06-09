@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { UserVO } from '@/types/auth';
 import * as authApi from '@/api/auth';
+import { hashPassword } from '@/utils/crypto';
 
 interface AuthState {
   token: string | null;
@@ -39,7 +40,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   login: async (username: string, password: string) => {
-    const result = await authApi.login({ username, password });
+    const hashed = await hashPassword(password);
+    const result = await authApi.login({ username, password: hashed });
     const loginVO = result as unknown as { token: string; username: string; role: string };
     localStorage.setItem('cms_token', loginVO.token);
     set({

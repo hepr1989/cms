@@ -236,10 +236,6 @@ export default function ArticleEditPage() {
     })),
   ];
 
-  const displayContent = isViewingHistory && versionContent
-    ? versionContent.contentMd
-    : currentArticle.contentMd;
-
   return (
     <div className="article-edit-page">
       <div className="toolbar">
@@ -293,9 +289,7 @@ export default function ArticleEditPage() {
 
       <div className="editor-body">
         {isViewingHistory ? (
-          <div style={{ padding: 24 }}>
-            <div dangerouslySetInnerHTML={{ __html: displayContent || '' }} />
-          </div>
+          <MarkdownEditor readOnly value={versionContent?.contentMd || ''} />
         ) : (
           <MarkdownEditor readOnly={!canEdit} />
         )}

@@ -12,6 +12,7 @@ import com.hepr.cms.attachment.service.StorageService;
 import com.hepr.cms.attachment.vo.AttachmentVO;
 import com.hepr.cms.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AttachmentServiceImpl implements AttachmentService {
@@ -35,7 +37,7 @@ public class AttachmentServiceImpl implements AttachmentService {
     private final StorageService storageService;
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public AttachmentVO upload(MultipartFile file, String refType, String refCode) {
         if (file.getSize() > 10 * 1024 * 1024) {
             throw new BusinessException(413, "文件大小不能超过10MB");
@@ -67,11 +69,13 @@ public class AttachmentServiceImpl implements AttachmentService {
             attachmentRefMapper.insert(ref);
         }
 
+        log.info("上传附件: attachmentCode={}, fileName={}, size={}, refType={}, refCode={}",
+                attachment.getAttachmentCode(), originalFilename, file.getSize(), refType, refCode);
         return populateDownloadUrl(BeanCopyUtil.copyProperties(attachment, AttachmentVO.class));
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public AttachmentVO uploadFromBytes(byte[] data, String fileName, String contentType, String refType, String refCode) {
         if (data.length > 10 * 1024 * 1024) {
             throw new BusinessException(413, "文件大小不能超过10MB");
@@ -102,6 +106,7 @@ public class AttachmentServiceImpl implements AttachmentService {
             attachmentRefMapper.insert(ref);
         }
 
+        log.info("上传附件(bytes): attachmentCode={}, fileName={}, size={}", attachment.getAttachmentCode(), fileName, data.length);
         return populateDownloadUrl(BeanCopyUtil.copyProperties(attachment, AttachmentVO.class));
     }
 
@@ -124,7 +129,7 @@ public class AttachmentServiceImpl implements AttachmentService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void delete(String attachmentCode) {
         Attachment attachment = attachmentMapper.selectOne(
                 new LambdaQueryWrapper<Attachment>().eq(Attachment::getAttachmentCode, attachmentCode));
@@ -135,6 +140,7 @@ public class AttachmentServiceImpl implements AttachmentService {
 
         attachmentRefMapper.delete(
                 new LambdaQueryWrapper<AttachmentRef>().eq(AttachmentRef::getAttachmentCode, attachmentCode));
+        log.info("删除附件: attachmentCode={}, fileName={}", attachmentCode, attachment.getFileName());
     }
 
     @Override

@@ -14,6 +14,7 @@ import com.hepr.cms.common.exception.BusinessException;
 import com.hepr.cms.common.exception.UnauthorizedException;
 import com.hepr.cms.common.security.UserContext;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
@@ -54,6 +56,7 @@ public class UserServiceImpl implements UserService {
             throw new UnauthorizedException("用户名或密码错误");
         }
         String token = jwtTokenProvider.generateToken(user.getUsername(), user.getRole());
+        log.info("用户登录成功: username={}, role={}", user.getUsername(), user.getRole());
         return new LoginVO(token, user.getUsername(), user.getRole());
     }
 
@@ -92,6 +95,7 @@ public class UserServiceImpl implements UserService {
         user.setRole(dto.getRole() != null ? dto.getRole() : "USER");
         user.setStatus(1);
         userMapper.insert(user);
+        log.info("创建用户: username={}, role={}", user.getUsername(), user.getRole());
         return toVO(user);
     }
 
@@ -108,6 +112,7 @@ public class UserServiceImpl implements UserService {
             user.setStatus(dto.getStatus());
         }
         userMapper.updateById(user);
+        log.info("更新用户: username={}, role={}, status={}", user.getUsername(), user.getRole(), user.getStatus());
         return toVO(user);
     }
 
@@ -129,6 +134,7 @@ public class UserServiceImpl implements UserService {
         user.setUsername(base + suffix);
         userMapper.updateById(user);
         userMapper.deleteById(user.getId());
+        log.info("删除用户: username={}", username);
     }
 
     @Override
@@ -140,6 +146,7 @@ public class UserServiceImpl implements UserService {
         // 前端已做 SHA-256 哈希，跳过明文复杂度校验，直接 BCrypt 存储
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         userMapper.updateById(user);
+        log.info("重置密码: username={}", username);
     }
 
     @Override

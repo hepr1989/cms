@@ -26,6 +26,7 @@ import com.hepr.cms.folder.service.FolderService;
 import com.hepr.cms.folder.vo.FolderVO;
 import com.hepr.cms.search.vo.SearchResultVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ArticleServiceImpl implements ArticleService {
@@ -64,7 +66,7 @@ public class ArticleServiceImpl implements ArticleService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ArticleVO create(ArticleCreateDTO dto) {
         if (!folderService.existsAndActive(dto.getFolderCode())) {
             throw new BusinessException(400, "所属目录不存在或已不可用");
@@ -88,11 +90,12 @@ public class ArticleServiceImpl implements ArticleService {
         article.setPublishedAt(null);
 
         articleMapper.insert(article);
+        log.info("创建文章: articleCode={}, title={}, folderCode={}", article.getArticleCode(), article.getTitle(), article.getFolderCode());
         return BeanCopyUtil.copyProperties(article, ArticleVO.class);
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ArticleVO importPdf(MultipartFile file, String folderCode) {
         if (!folderService.existsAndActive(folderCode)) {
             throw new BusinessException(400, "所属目录不存在或已不可用");
@@ -130,11 +133,12 @@ public class ArticleServiceImpl implements ArticleService {
         article.setContentMd(importResult.getMarkdown());
         articleMapper.updateById(article);
 
+        log.info("PDF导入完成: articleCode={}, title={}, fileName={}", article.getArticleCode(), article.getTitle(), originalFilename);
         return BeanCopyUtil.copyProperties(article, ArticleVO.class);
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ArticleVO update(ArticleUpdateDTO dto) {
         Article article = articleMapper.selectOne(
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, dto.getArticleCode()));
@@ -162,11 +166,12 @@ public class ArticleServiceImpl implements ArticleService {
         article.setContentMd(dto.getContentMd());
         article.setFolderCode(dto.getFolderCode());
         articleMapper.updateById(article);
+        log.info("更新文章: articleCode={}, title={}, version={}", article.getArticleCode(), article.getTitle(), article.getVersionNumber());
         return BeanCopyUtil.copyProperties(article, ArticleVO.class);
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void publish(String articleCode) {
         Article article = articleMapper.selectOne(
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, articleCode));
@@ -181,10 +186,11 @@ public class ArticleServiceImpl implements ArticleService {
         article.setStatus(ArticleStatus.PUBLISHED.name());
         article.setPublishedAt(LocalDateTime.now());
         articleMapper.updateById(article);
+        log.info("发布文章: articleCode={}, title={}", articleCode, article.getTitle());
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void offline(String articleCode) {
         Article article = articleMapper.selectOne(
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, articleCode));
@@ -198,10 +204,11 @@ public class ArticleServiceImpl implements ArticleService {
         }
         article.setStatus(ArticleStatus.OFFLINE.name());
         articleMapper.updateById(article);
+        log.info("下线文章: articleCode={}, title={}", articleCode, article.getTitle());
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void delete(String articleCode) {
         Article article = articleMapper.selectOne(
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, articleCode));
@@ -220,10 +227,11 @@ public class ArticleServiceImpl implements ArticleService {
                 new LambdaQueryWrapper<AttachmentRef>()
                         .eq(AttachmentRef::getRefCode, articleCode)
                         .eq(AttachmentRef::getRefType, "article"));
+        log.info("删除文章: articleCode={}, title={}", articleCode, article.getTitle());
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void updateSort(ArticleSortDTO dto) {
         Article moving = articleMapper.selectOne(
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, dto.getMovingCode()));
@@ -245,7 +253,7 @@ public class ArticleServiceImpl implements ArticleService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void moveArticle(ArticleMoveDTO dto) {
         Article article = articleMapper.selectOne(
                 new LambdaQueryWrapper<Article>().eq(Article::getArticleCode, dto.getArticleCode()));
@@ -278,6 +286,7 @@ public class ArticleServiceImpl implements ArticleService {
         }
 
         articleMapper.updateById(article);
+        log.info("移动文章: articleCode={}, targetFolderCode={}", article.getArticleCode(), dto.getTargetFolderCode());
     }
 
     @Override

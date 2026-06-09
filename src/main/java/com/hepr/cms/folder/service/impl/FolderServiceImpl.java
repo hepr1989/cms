@@ -16,6 +16,7 @@ import com.hepr.cms.folder.service.FolderService;
 import com.hepr.cms.folder.vo.FolderTreeVO;
 import com.hepr.cms.folder.vo.FolderVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ import org.springframework.util.StringUtils;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FolderServiceImpl implements FolderService {
@@ -106,7 +108,7 @@ public class FolderServiceImpl implements FolderService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public FolderVO create(FolderCreateDTO dto) {
         String parentCode = StringUtils.hasText(dto.getParentFolderCode()) ? dto.getParentFolderCode() : "-1";
 
@@ -146,11 +148,12 @@ public class FolderServiceImpl implements FolderService {
         folder.setStatus(1);
 
         folderMapper.insert(folder);
+        log.info("创建目录: folderCode={}, title={}, parentCode={}", folder.getFolderCode(), folder.getTitle(), folder.getParentFolderCode());
         return BeanCopyUtil.copyProperties(folder, FolderVO.class);
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public FolderVO update(FolderUpdateDTO dto) {
         Folder folder = folderMapper.selectOne(
                 new LambdaQueryWrapper<Folder>().eq(Folder::getFolderCode, dto.getFolderCode()));
@@ -160,11 +163,12 @@ public class FolderServiceImpl implements FolderService {
         folder.setDescription(dto.getDescription());
         folder.setStatus(dto.getStatus());
         folderMapper.updateById(folder);
+        log.info("更新目录: folderCode={}, title={}, status={}", folder.getFolderCode(), folder.getTitle(), folder.getStatus());
         return BeanCopyUtil.copyProperties(folder, FolderVO.class);
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void delete(String folderCode) {
         Folder folder = folderMapper.selectOne(
                 new LambdaQueryWrapper<Folder>().eq(Folder::getFolderCode, folderCode));
@@ -184,10 +188,11 @@ public class FolderServiceImpl implements FolderService {
         }
 
         folderMapper.deleteById(folder.getId());
+        log.info("删除目录: folderCode={}, title={}", folderCode, folder.getTitle());
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void updateSort(FolderSortDTO dto) {
         Folder moving = folderMapper.selectOne(
                 new LambdaQueryWrapper<Folder>().eq(Folder::getFolderCode, dto.getMovingCode()));
@@ -209,7 +214,7 @@ public class FolderServiceImpl implements FolderService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void moveFolder(FolderMoveDTO dto) {
         Folder folder = folderMapper.selectOne(
                 new LambdaQueryWrapper<Folder>().eq(Folder::getFolderCode, dto.getFolderCode()));
@@ -260,6 +265,7 @@ public class FolderServiceImpl implements FolderService {
         }
 
         folderMapper.updateById(folder);
+        log.info("移动目录: folderCode={}, targetParentCode={}", folder.getFolderCode(), dto.getTargetParentFolderCode());
     }
 
     /** 检查 targetCode 是否是 folderCode 的后代（内存遍历，一次查询所有栏目） */

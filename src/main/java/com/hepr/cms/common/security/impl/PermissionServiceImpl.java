@@ -9,6 +9,7 @@ import com.hepr.cms.permission.entity.FolderPermission;
 import com.hepr.cms.permission.mapper.FolderPermissionMapper;
 import com.hepr.cms.permission.vo.FolderPermissionVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PermissionServiceImpl implements PermissionService {
@@ -41,7 +43,7 @@ public class PermissionServiceImpl implements PermissionService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void grantPermission(String username, String folderCode) {
         Set<String> allCodes = collectDescendantCodesInMemory(Set.of(folderCode));
 
@@ -50,18 +52,20 @@ public class PermissionServiceImpl implements PermissionService {
 
         // 批量插入新权限
         batchInsertPermissions(username, allCodes);
+        log.info("授权: username={}, folderCode={}, 级联栏目数={}", username, folderCode, allCodes.size());
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void revokePermission(String username, String folderCode) {
         Set<String> allCodes = collectDescendantCodesInMemory(Set.of(folderCode));
         // 物理删除，避免软删除导致唯一索引冲突
         folderPermissionMapper.physicalDeleteBatch(username, new ArrayList<>(allCodes));
+        log.info("撤销权限: username={}, folderCode={}, 级联栏目数={}", username, folderCode, allCodes.size());
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void batchUpdatePermissions(String username, List<String> grantCodes, List<String> revokeCodes) {
         // 一次加载所有栏目，在内存中计算子栏目级联
         Map<String, List<String>> childrenMap = buildChildrenMap();
@@ -83,6 +87,7 @@ public class PermissionServiceImpl implements PermissionService {
             folderPermissionMapper.physicalDeleteBatch(username, grantList);
             batchInsertPermissions(username, allGrantSet);
         }
+        log.info("批量更新权限: username={}, 授权栏目数={}, 撤销栏目数={}", username, allGrantSet.size(), allRevokeSet.size());
     }
 
     @Override

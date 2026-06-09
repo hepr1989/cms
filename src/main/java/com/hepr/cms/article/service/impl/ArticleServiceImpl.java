@@ -283,6 +283,7 @@ public class ArticleServiceImpl implements ArticleService {
     @Override
     public List<ArticleVO> listByFolderCode(String folderCode, boolean portalMode) {
         LambdaQueryWrapper<Article> qw = new LambdaQueryWrapper<Article>()
+                .select(Article.class, info -> !"content_md".equals(info.getColumn()))
                 .eq(Article::getFolderCode, folderCode);
         if (portalMode) {
             qw.eq(Article::getStatus, ArticleStatus.PUBLISHED.name());

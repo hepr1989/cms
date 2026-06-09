@@ -11,6 +11,8 @@ export const getChildren = (folderCode: string, portalMode = false) =>
 
 export const getFolder = (folderCode: string) => client.get<FolderVO>(`/folders/${folderCode}`);
 
+export const getAncestorPath = (folderCode: string) => client.get<string[]>(`/folders/${folderCode}/path`);
+
 export const createFolder = (data: FolderCreateDTO) => client.post<FolderVO>('/folders', data);
 
 export const updateFolder = (data: FolderUpdateDTO) => client.put<FolderVO>('/folders', data);

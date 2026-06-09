@@ -46,6 +46,11 @@ public class FolderController {
         return Result.ok(folderService.getChildren(folderCode, portalMode));
     }
 
+    @GetMapping("/{folderCode}/path")
+    public Result<List<String>> getAncestorPath(@PathVariable String folderCode) {
+        return Result.ok(folderService.getAncestorPath(folderCode));
+    }
+
     @PostMapping
     public Result<FolderVO> create(@Validated @RequestBody FolderCreateDTO dto) {
         requireAdmin();

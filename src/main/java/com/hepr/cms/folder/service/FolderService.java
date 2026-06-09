@@ -22,4 +22,5 @@ public interface FolderService {
     FolderVO getByCode(String folderCode);
     boolean existsAndActive(String folderCode);
     List<FolderVO> getAllFoldersFlat();
+    List<String> getAncestorPath(String folderCode);
 }

@@ -317,4 +317,25 @@ public class FolderServiceImpl implements FolderService {
                 .map(f -> BeanCopyUtil.copyProperties(f, FolderVO.class))
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public List<String> getAncestorPath(String folderCode) {
+        List<Folder> allFolders = folderMapper.selectList(
+                new LambdaQueryWrapper<Folder>()
+                        .select(Folder::getFolderCode, Folder::getParentFolderCode)
+                        .eq(Folder::getStatus, 1));
+        Map<String, String> parentMap = new HashMap<>();
+        for (Folder f : allFolders) {
+            parentMap.put(f.getFolderCode(), f.getParentFolderCode());
+        }
+        List<String> path = new ArrayList<>();
+        String current = folderCode;
+        Set<String> visited = new HashSet<>();
+        while (current != null && !"-1".equals(current) && !visited.contains(current)) {
+            visited.add(current);
+            path.add(0, current);
+            current = parentMap.get(current);
+        }
+        return path;
+    }
 }

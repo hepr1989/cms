@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import type { TreeDataNode, FolderVO, ArticleVO } from '@/types';
-import { getRootFolders, getChildren, getAllFoldersFlat } from '@/api/folder';
+import { getRootFolders, getChildren, getAncestorPath } from '@/api/folder';
 
 type TreeMode = 'admin' | 'portal';
 
@@ -102,21 +102,22 @@ function collectDescendantFolderKeys(nodes: TreeDataNode[]): string[] {
   return result;
 }
 
-/** 重新加载所有已展开但未加载子节点的目录，保持展开状态 */
+/** 重新加载所有已展开但未加载子节点的目录，保持展开状态（BFS 波次并行） */
 async function reloadExpandedFolders(get: () => TreeState) {
-  const attempted = new Set<string>();
   let hasMore = true;
   while (hasMore) {
-    hasMore = false;
-    const { expandedKeys, loadedKeys, treeData } = get();
+    const { expandedKeys, loadedKeys, loadingKeys, treeData } = get();
+    const toLoad: string[] = [];
     for (const key of expandedKeys) {
-      if (loadedKeys.includes(key) || attempted.has(key)) continue;
+      if (loadedKeys.includes(key) || loadingKeys.includes(key)) continue;
       if (!findNode(treeData, key)) continue;
-      attempted.add(key);
-      await get().loadChildren(key);
-      hasMore = true;
-      break;
+      toLoad.push(key);
     }
+    if (toLoad.length === 0) break;
+    await Promise.all(toLoad.map(key => get().loadChildren(key)));
+    // 如果有新一层的目录可见了，继续下一波
+    hasMore = get().expandedKeys.some(k =>
+      !get().loadedKeys.includes(k) && !get().loadingKeys.includes(k) && findNode(get().treeData, k));
   }
 }
 
@@ -152,20 +153,13 @@ async function doSyncSelection(key: string, folderCode?: string) {
   let path = findPathToNode(useTreeStore.getState().treeData, key);
 
   if (!path) {
-    // 用 getAllFoldersFlat 一次获取所有栏目，在内存中计算父链
+    // 用 getAncestorPath 获取从根到目标的路径（替代 getAllFoldersFlat 全量加载）
     try {
-      const allFolders = await getAllFoldersFlat() as unknown as FolderVO[];
-      const folderMap = new Map<string, FolderVO>();
-      for (const f of allFolders) {
-        folderMap.set(f.folderCode, f);
-      }
-
       // 确定目标所在栏目
       let targetFolderCode: string | null = null;
       if (key.startsWith('folder-')) {
         targetFolderCode = key.replace('folder-', '');
       } else if (key.startsWith('article-')) {
-        // 优先用调用者传入的 folderCode（F5 刷新时文章节点不在树中）
         if (folderCode) {
           targetFolderCode = folderCode;
         } else {
@@ -176,19 +170,10 @@ async function doSyncSelection(key: string, folderCode?: string) {
         }
       }
 
-      if (targetFolderCode && folderMap.has(targetFolderCode)) {
-        // 通过 parentFolderCode 向上走，构建从根到目标的路径
-        const pathFolderCodes: string[] = [];
-        let current = targetFolderCode;
-        const visited = new Set<string>();
-        while (current && current !== '-1' && !visited.has(current)) {
-          visited.add(current);
-          pathFolderCodes.unshift(current);
-          const folder = folderMap.get(current);
-          current = folder?.parentFolderCode ?? '-1';
-        }
+      if (targetFolderCode) {
+        const pathFolderCodes = await getAncestorPath(targetFolderCode) as unknown as string[];
 
-        // 只加载路径上的栏目子节点（而非全树）
+        // 逐层加载路径上的栏目子节点
         for (const code of pathFolderCodes) {
           const folderKey = `folder-${code}`;
           if (!useTreeStore.getState().loadedKeys.includes(folderKey)) {

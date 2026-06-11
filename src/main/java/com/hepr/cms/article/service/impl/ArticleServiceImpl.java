@@ -426,6 +426,12 @@ public class ArticleServiceImpl implements ArticleService {
         version.setStatus(article.getStatus());
         version.setVersionNumber(article.getVersionNumber() != null ? article.getVersionNumber() : 1);
         version.setPublishedAt(article.getPublishedAt());
+        // 保留原始审计信息，不被 MetaObjectHandler 的 insertFill 覆盖为当前用户
+        // 创建人和创建时间应该为上个发布版本的更新人和更新时间
+        version.setCreatedBy(article.getUpdatedBy());
+        version.setCreatedAt(article.getUpdatedAt());
+        version.setUpdatedBy(article.getUpdatedBy());
+        version.setUpdatedAt(article.getUpdatedAt());
         articleVersionMapper.insert(version);
     }
 

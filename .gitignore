@@ -12,6 +12,7 @@ hs_err_pid*
 mvnw.cmd
 
 # Node.js / Frontend
+node/
 node_modules/
 dist/
 build/
@@ -55,3 +56,5 @@ logs/
 compile_output.txt
 
 scripts/
+
+uploads/

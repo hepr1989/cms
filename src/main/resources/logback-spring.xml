@@ -50,7 +50,7 @@
     </appender>
 
     <!-- 业务包日志级别 -->
-    <logger name="com.hepr.cms" level="INFO"/>
+    <logger name="com.hepr.cms" level="DEBUG"/>
 
     <!-- 框架日志降噪 -->
     <logger name="org.springframework.web" level="INFO"/>

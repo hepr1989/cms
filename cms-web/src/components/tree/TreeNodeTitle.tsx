@@ -3,6 +3,7 @@ import { FolderOutlined, FileTextOutlined, EditOutlined, DeleteOutlined } from '
 import { Button, Modal, message } from 'antd';
 import type { TreeDataNode } from '@/types';
 import { useUIStore } from '@/store/ui-store';
+import { useAuthStore } from '@/store/auth-store';
 import { useTreeStore } from '@/store/tree-store';
 import { deleteFolder } from '@/api/folder';
 import { deleteArticle } from '@/api/article';
@@ -15,6 +16,7 @@ interface Props {
 
 const TreeNodeTitle = React.memo(function TreeNodeTitle({ node, mode }: Props) {
   const openModal = useUIStore(s => s.openModal);
+  const isAdmin = useAuthStore(s => s.isAdmin);
   const removeNode = useTreeStore(s => s.removeNode);
 
   const handleDelete = async () => {
@@ -47,7 +49,7 @@ const TreeNodeTitle = React.memo(function TreeNodeTitle({ node, mode }: Props) {
     <div className="tree-node-title" style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
       {node.type === 'folder' ? <FolderOutlined style={{ color: 'var(--color-primary)' }} /> : <FileTextOutlined style={{ color: statusColor || 'var(--color-text-secondary)' }} />}
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.title}</span>
-      {mode === 'admin' && (
+      {mode === 'admin' && isAdmin() && (
         <span className="tree-node-actions" style={{ display: 'none' }}>
           {node.type === 'folder' && (
             <>

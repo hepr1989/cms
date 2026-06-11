@@ -3,6 +3,7 @@ import { Tree, message } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import TreeNodeTitle from './TreeNodeTitle';
 import { useTreeStore } from '@/store/tree-store';
+import { useAuthStore } from '@/store/auth-store';
 import { useNavigate } from 'react-router-dom';
 import { updateFolderSort, moveFolder } from '@/api/folder';
 import { updateArticleSort, moveArticle } from '@/api/article';
@@ -33,6 +34,7 @@ function parseKey(key: string) {
 
 export default function FolderTree({ mode }: FolderTreeProps) {
   const navigate = useNavigate();
+  const isAdmin = useAuthStore(s => s.isAdmin);
   const treeData = useTreeStore(s => s.treeData);
   const expandedKeys = useTreeStore(s => s.expandedKeys);
   const selectedKey = useTreeStore(s => s.selectedKey);
@@ -41,6 +43,9 @@ export default function FolderTree({ mode }: FolderTreeProps) {
   const selectNode = useTreeStore(s => s.selectNode);
   const setExpandedKeys = useTreeStore(s => s.setExpandedKeys);
   const setMode = useTreeStore(s => s.setMode);
+
+  // 只有管理员才能拖拽目录结构
+  const canDrag = mode === 'admin' && isAdmin();
 
   // 拖拽自动展开相关
   const dragExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -272,8 +277,8 @@ export default function FolderTree({ mode }: FolderTreeProps) {
   };
 
   const antTreeData = useMemo<DataNode[]>(
-    () => treeData.map(n => convertNode(n, mode)),
-    [treeData, mode]
+    () => treeData.map(n => convertNode(n, mode, canDrag)),
+    [treeData, mode, canDrag]
   );
 
   return (
@@ -284,7 +289,7 @@ export default function FolderTree({ mode }: FolderTreeProps) {
       selectedKeys={selectedKey ? [selectedKey] : []}
       onSelect={handleSelect}
       onExpand={handleExpand}
-      draggable={mode === 'admin' ? { icon: false, nodeDraggable: () => true } : false}
+      draggable={canDrag ? { icon: false, nodeDraggable: () => true } : false}
       onDrop={handleDrop}
       allowDrop={allowDrop}
       onDragEnter={handleDragEnter}
@@ -317,7 +322,7 @@ function isDescendant(nodes: TreeDataNode[], dragKey: string, targetKey: string)
   return false;
 }
 
-function convertNode(node: TreeDataNode, mode: 'admin' | 'portal'): DataNode {
+function convertNode(node: TreeDataNode, mode: 'admin' | 'portal', canDrag: boolean): DataNode {
   const isAdmin = mode === 'admin';
   const isFolder = node.type === 'folder';
 
@@ -326,11 +331,11 @@ function convertNode(node: TreeDataNode, mode: 'admin' | 'portal'): DataNode {
     c => c.key !== '__loading__' && !c.key.startsWith(DROP_PLACEHOLDER_PREFIX)
   ) || [];
 
-  // 管理模式下目录：
+  // 管理员可拖拽模式下目录：
   // 1. isLeaf 设为 false（始终可展开）
   // 2. 如果没有真实子节点，添加隐藏占位子节点让 rc-tree 允许"拖入"
-  if (isAdmin && isFolder) {
-    const convertedChildren = realChildren.map(c => convertNode(c, mode));
+  if (canDrag && isFolder) {
+    const convertedChildren = realChildren.map(c => convertNode(c, mode, canDrag));
     if (convertedChildren.length === 0) {
       convertedChildren.push({
         key: `${DROP_PLACEHOLDER_PREFIX}${node.key}`,
@@ -352,6 +357,6 @@ function convertNode(node: TreeDataNode, mode: 'admin' | 'portal'): DataNode {
     key: node.key,
     title: <TreeNodeTitle node={node} mode={mode} />,
     isLeaf: node.isLeaf,
-    children: realChildren.length > 0 ? realChildren.map(c => convertNode(c, mode)) : undefined,
+    children: realChildren.length > 0 ? realChildren.map(c => convertNode(c, mode, canDrag)) : undefined,
   } as DataNode;
 }

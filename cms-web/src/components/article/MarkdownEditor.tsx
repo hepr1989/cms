@@ -9,21 +9,27 @@ import AttachmentLink from '@/components/article/AttachmentLink';
 
 /** ============ SVG 图标 (与内置命令 12x12 风格一致) ============ */
 
-const AlignLeftIcon = () => (
-  <svg role="img" width="12" height="12" viewBox="0 0 512 512" fill="currentColor">
-    <path d="M48 72h416c13.3 0 24-10.7 24-24S477.3 24 464 24H48C34.7 24 24 34.7 24 48s10.7 24 24 24zm0 160h256c13.3 0 24-10.7 24-24s-10.7-24-24-24H48c-13.3 0-24 10.7-24 24s10.7 24 24 24zm416 112H48c-13.3 0-24 10.7-24 24s10.7 24 24 24h416c13.3 0 24-10.7 24-24s-10.7-24-24-24zM304 408H48c-13.3 0-24 10.7-24 24s10.7 24 24 24h256c13.3 0 24-10.7 24-24s-10.7-24-24-24z" />
-  </svg>
-);
-
 const AlignCenterIcon = () => (
   <svg role="img" width="12" height="12" viewBox="0 0 512 512" fill="currentColor">
     <path d="M464 24H48C34.7 24 24 34.7 24 48s10.7 24 24 24h416c13.3 0 24-10.7 24-24s-10.7-24-24-24zM304 136H208c-13.3 0-24 10.7-24 24s10.7 24 24 24h96c13.3 0 24-10.7 24-24s-10.7-24-24-24zm160 112H48c-13.3 0-24 10.7-24 24s10.7 24 24 24h416c13.3 0 24-10.7 24-24s-10.7-24-24-24zM304 328H208c-13.3 0-24 10.7-24 24s10.7 24 24 24h96c13.3 0 24-10.7 24-24s-10.7-24-24-24zM464 432H48C34.7 432 24 421.3 24 408s10.7-24 24-24h416c13.3 0 24 10.7 24 24s-10.7 24-24 24z" />
   </svg>
 );
 
-const AlignRightIcon = () => (
-  <svg role="img" width="12" height="12" viewBox="0 0 512 512" fill="currentColor">
-    <path d="M464 72H48C34.7 72 24 61.3 24 48s10.7-24 24-24h416c13.3 0 24 10.7 24 24s-10.7 24-24 24zM208 232H48c-13.3 0-24 10.7-24 24s10.7 24 24 24h160c13.3 0 24-10.7 24-24s-10.7-24-24-24zm256 112H48c-13.3 0-24 10.7-24 24s10.7 24 24 24h416c13.3 0 24-10.7 24-24s-10.7-24-24-24zM208 408H48c-13.3 0-24 10.7-24 24s10.7 24 24 24h160c13.3 0 24-10.7 24-24s-10.7-24-24-24z" />
+const UnderlineIcon = () => (
+  <svg data-name="underline" width="12" height="12" role="img" viewBox="0 0 448 512">
+    <path
+      fill="currentColor"
+      d="M224 384c88.4 0 160-71.6 160-160V32c0-17.7-14.3-32-32-32s-32 14.3-32 32v192c0 53-43 96-96 96s-96-43-96-96V32c0-17.7-14.3-32-32-32S64 14.3 64 32v192c0 88.4 71.6 160 160 160zM0 464c0 17.7 14.3 32 32 32h384c17.7 0 32-14.3 32-32s-14.3-32-32-32H32c-17.7 0-32 14.3-32 32z"
+    />
+  </svg>
+);
+
+const HighlightIcon = () => (
+  <svg data-name="highlight" width="12" height="12" role="img" viewBox="0 0 576 512">
+    <path
+      fill="currentColor"
+      d="M558.2 162.6c12.5-12.5 12.5-32.8 0-45.3l-67.3-67.3c-12.5-12.5-32.8-12.5-45.3 0L352 143.6l-67.3-67.3c-12.5-12.5-32.8-12.5-45.3 0l-67.3 67.3c-12.5 12.5-12.5 32.8 0 45.3l67.3 67.3L58.7 436.9C21.7 473.9 0 524.1 0 576h576c0-51.9-21.7-102.1-58.7-139.1L336.6 256.2l221.6-93.6zM243.9 364.1l147-147 45.3 45.3-147 147c-12.3 12.3-27.9 21-45.2 25.5l-50.7 12.7 12.7-50.7c4.5-17.3 13.2-32.9 25.5-45.2z"
+    />
   </svg>
 );
 
@@ -104,6 +110,10 @@ export default function MarkdownEditor({ readOnly = false, value }: { readOnly?:
   const toggleOutline = useCallback(() => setShowOutline(v => !v), []);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
 
+  // 追踪光标所在位置的格式状态（用于工具栏按钮高亮）
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
+  const editorRef = useRef<HTMLDivElement>(null);
+
   // 外部传入 value 时优先使用（历史版本预览场景）
   const contentMd = value !== undefined ? value : (article?.contentMd || '');
 
@@ -111,6 +121,27 @@ export default function MarkdownEditor({ readOnly = false, value }: { readOnly?:
     () => extractHeadings(contentMd),
     [contentMd]
   );
+
+  // 监听光标位置，检测是否在 <u>/<mark>/<center> 标签内
+  useEffect(() => {
+    if (readOnly) return;
+    const updateActiveFormats = () => {
+      const ta = editorRef.current?.querySelector('textarea');
+      if (!ta) return;
+      const { value: text, selectionStart } = ta;
+      const before = text.slice(0, selectionStart);
+      const active = new Set<string>();
+      if ((before.lastIndexOf('<u>') > before.lastIndexOf('</u>'))) active.add('underline');
+      if ((before.lastIndexOf('<mark>') > before.lastIndexOf('</mark>'))) active.add('highlight');
+      if ((before.lastIndexOf('<center>') > before.lastIndexOf('</center>'))) active.add('center');
+      setActiveFormats(prev => {
+        if (prev.size === active.size && [...active].every(v => prev.has(v))) return prev;
+        return active;
+      });
+    };
+    document.addEventListener('selectionchange', updateActiveFormats);
+    return () => document.removeEventListener('selectionchange', updateActiveFormats);
+  }, [readOnly]);
 
   /** 通用图片上传（按钮上传 + 粘贴共用） */
   const handleImageUpload = useCallback(async (file: File) => {
@@ -144,9 +175,34 @@ export default function MarkdownEditor({ readOnly = false, value }: { readOnly?:
     }
   }, [article?.articleCode]);
 
+  // 自定义按钮渲染：支持格式高亮
+  const renderFmtBtn = useCallback(
+    (fmtKey: string) => (cmd: ICommand, disabled: boolean, execCmd: (c: ICommand) => void, idx: number) => {
+      const isActive = activeFormats.has(fmtKey);
+      return (
+        <button
+          type="button"
+          disabled={disabled}
+          data-name={cmd.name}
+          {...cmd.buttonProps}
+          style={isActive
+            ? { ...((cmd.buttonProps as any)?.style || {}), color: 'var(--color-accent-fg)', backgroundColor: 'var(--color-neutral-muted)' }
+            : (cmd.buttonProps as any)?.style}
+          onClick={(e) => { e.stopPropagation(); execCmd(cmd); }}
+        >
+          {cmd.icon}
+        </button>
+      );
+    },
+    [activeFormats],
+  );
+
   const commands = useMemo(() => {
     const builtIn = applyZhTitles(getCommands());
     const filtered = builtIn.filter(cmd => cmd.name !== 'image' && cmd.name !== 'help');
+    // 将下划线和高亮插入到 strikethrough 后面，与粗体/斜体/删除线同组
+    const strikeIdx = filtered.findIndex(c => c.name === 'strikethrough');
+    const insertAt = strikeIdx >= 0 ? strikeIdx + 1 : filtered.length;
 
     const imageUploadCmd: ICommand = {
       name: 'image-upload',
@@ -184,16 +240,34 @@ export default function MarkdownEditor({ readOnly = false, value }: { readOnly?:
       },
     };
 
-    const alignLeftCmd: ICommand = {
-      name: 'align-left',
-      keyCommand: 'align-left',
-      shortcuts: 'ctrlcmd+shift+l',
-      icon: <AlignLeftIcon />,
-      buttonProps: { title: '居左对齐', 'aria-label': '居左对齐' },
-      execute: (state: any, api: any) => {
-        const text = state.selectedText || '';
-        api.replaceSelection(`<div style="text-align: left">\n\n${text}\n\n</div>\n`);
-      },
+    // 通用 HTML 标签包裹/解包裹执行函数，支持三种情况：
+    // 1. 选区包含标签：<u>text</u> → 解包裹
+    // 2. 选区在标签内部（光标选中了内部文本）→ 检测外围标签并解包裹
+    // 3. 无标签 → 包裹
+    const execTagToggle = (state: any, api: any, open: string, close: string) => {
+      const text = state.selectedText || '';
+      const sel = state.selection;
+      // 情况1：选区本身包含完整标签
+      const re = new RegExp(`^${open.replace(/[<>]/g, c => '\\' + c)}([\\s\\S]*)${close.replace(/[<>]/g, c => '\\' + c)}$`);
+      const match = text.match(re);
+      if (match) {
+        api.replaceSelection(match[1]);
+        api.setSelectionRange({ start: sel.start, end: sel.end - open.length - close.length });
+        return;
+      }
+      // 情况2：选区在标签内部（上次操作后重新选中的内部文本）
+      const fullText = state.text || '';
+      const textBefore = fullText.slice(0, sel.start);
+      const textAfter = fullText.slice(sel.end);
+      if (textBefore.endsWith(open) && textAfter.startsWith(close)) {
+        api.setSelectionRange({ start: sel.start - open.length, end: sel.end + close.length });
+        api.replaceSelection(text);
+        api.setSelectionRange({ start: sel.start - open.length, end: sel.end - open.length });
+        return;
+      }
+      // 情况3：无标签，包裹
+      api.replaceSelection(`${open}${text}${close}`);
+      api.setSelectionRange({ start: sel.start + open.length, end: sel.end + open.length });
     };
 
     const alignCenterCmd: ICommand = {
@@ -202,22 +276,28 @@ export default function MarkdownEditor({ readOnly = false, value }: { readOnly?:
       shortcuts: 'ctrlcmd+shift+e',
       icon: <AlignCenterIcon />,
       buttonProps: { title: '居中对齐', 'aria-label': '居中对齐' },
-      execute: (state: any, api: any) => {
-        const text = state.selectedText || '';
-        api.replaceSelection(`<div style="text-align: center">\n\n${text}\n\n</div>\n`);
-      },
+      render: renderFmtBtn('center'),
+      execute: (state: any, api: any) => execTagToggle(state, api, '<center>', '</center>'),
     };
 
-    const alignRightCmd: ICommand = {
-      name: 'align-right',
-      keyCommand: 'align-right',
-      shortcuts: 'ctrlcmd+shift+r',
-      icon: <AlignRightIcon />,
-      buttonProps: { title: '居右对齐', 'aria-label': '居右对齐' },
-      execute: (state: any, api: any) => {
-        const text = state.selectedText || '';
-        api.replaceSelection(`<div style="text-align: right">\n\n${text}\n\n</div>\n`);
-      },
+    const underlineCmd: ICommand = {
+      name: 'underline',
+      keyCommand: 'underline',
+      shortcuts: 'ctrlcmd+u',
+      icon: <UnderlineIcon />,
+      buttonProps: { title: '下划线 (Ctrl+U)', 'aria-label': '下划线 (Ctrl+U)' },
+      render: renderFmtBtn('underline'),
+      execute: (state: any, api: any) => execTagToggle(state, api, '<u>', '</u>'),
+    };
+
+    const highlightCmd: ICommand = {
+      name: 'highlight',
+      keyCommand: 'highlight',
+      shortcuts: 'ctrlcmd+shift+h',
+      icon: <HighlightIcon />,
+      buttonProps: { title: '高亮 (Ctrl+Shift+H)', 'aria-label': '高亮 (Ctrl+Shift+H)' },
+      render: renderFmtBtn('highlight'),
+      execute: (state: any, api: any) => execTagToggle(state, api, '<mark>', '</mark>'),
     };
 
     const outlineCmd: ICommand = {
@@ -233,17 +313,18 @@ export default function MarkdownEditor({ readOnly = false, value }: { readOnly?:
     };
 
     return [
-      ...filtered,
+      ...filtered.slice(0, insertAt),
+      underlineCmd,
+      highlightCmd,
+      ...filtered.slice(insertAt),
       mdCommands.divider,
       imageUploadCmd,
       attachmentUploadCmd,
-      alignLeftCmd,
       alignCenterCmd,
-      alignRightCmd,
       mdCommands.divider,
       outlineCmd,
     ];
-  }, [showOutline, toggleOutline, handleImageUpload, handleAttachmentUpload]);
+  }, [showOutline, toggleOutline, handleImageUpload, handleAttachmentUpload, renderFmtBtn]);
 
   const extraCommands = useMemo(() => {
     const builtInExtra = applyZhTitles(getExtraCommands());
@@ -251,7 +332,6 @@ export default function MarkdownEditor({ readOnly = false, value }: { readOnly?:
   }, []);
 
   // 用 MutationObserver 持续为 MDEditor 预览区标题添加 ID
-  const editorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;

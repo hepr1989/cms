@@ -7,7 +7,9 @@ import com.hepr.cms.article.dto.ArticleUpdateDTO;
 import com.hepr.cms.article.service.ArticleService;
 import com.hepr.cms.article.vo.ArticleVO;
 import com.hepr.cms.article.vo.ArticleVersionVO;
+import com.hepr.cms.common.exception.BusinessException;
 import com.hepr.cms.common.model.Result;
+import com.hepr.cms.common.security.UserContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -64,12 +66,14 @@ public class ArticleController {
 
     @PutMapping("/sort")
     public Result<Void> updateSort(@Validated @RequestBody ArticleSortDTO dto) {
+        requireAdmin();
         articleService.updateSort(dto);
         return Result.ok();
     }
 
     @PutMapping("/move")
     public Result<Void> moveArticle(@Validated @RequestBody ArticleMoveDTO dto) {
+        requireAdmin();
         articleService.moveArticle(dto);
         return Result.ok();
     }
@@ -83,5 +87,11 @@ public class ArticleController {
     public Result<ArticleVersionVO> getVersionDetail(@PathVariable String articleCode,
                                                      @PathVariable int versionNumber) {
         return Result.ok(articleService.getVersionDetail(articleCode, versionNumber));
+    }
+
+    private void requireAdmin() {
+        if (!UserContext.isAdmin()) {
+            throw new BusinessException(403, "无权限，仅管理员可操作");
+        }
     }
 }

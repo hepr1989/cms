@@ -13,8 +13,9 @@ export const ARTICLE_STATUS_CONFIG: Record<string, { color: string; label: strin
 
 export const DEBOUNCE_DELAY = 300;
 
-/** 格式化日期时间，去掉 ISO 格式中的 T，将 2026-05-01T13:18:19 显示为 2026-05-01 13:18:19 */
+/** 格式化日期时间，去掉 ISO 格式中的 T 和小数秒，将 2026-05-01T13:18:19.0050004 显示为 2026-05-01 13:18:19 */
 export function formatDateTime(value?: string | null): string {
   if (!value) return '';
-  return value.replace('T', ' ');
+  // 截取到秒级（去掉小数秒），再将 T 替换为空格
+  return value.replace(/(\d{2}:\d{2}:\d{2}).*/, '$1').replace('T', ' ');
 }

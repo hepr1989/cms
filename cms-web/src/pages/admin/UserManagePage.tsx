@@ -116,6 +116,8 @@ export default function UserManagePage() {
   const handleResetPassword = async (username: string) => {
     Modal.confirm({
       title: '重置密码',
+      okText: '确认',
+      cancelText: '取消',
       content: (
         <div>
           <Input.Password

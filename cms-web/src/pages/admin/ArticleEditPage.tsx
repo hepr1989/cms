@@ -159,6 +159,8 @@ export default function ArticleEditPage() {
   const handleSave = () => {
     Modal.confirm({
       title: '确认保存',
+      okText: '确认',
+      cancelText: '取消',
       content: currentArticle?.status === 'PUBLISHED'
         ? '此文章已发布，保存后状态将变为草稿，需重新发布'
         : '确定要保存当前文章吗？',
@@ -184,9 +186,25 @@ export default function ArticleEditPage() {
     }
   };
 
+  // Ctrl+S 快捷保存
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSaveRef.current();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handlePublish = () => {
     Modal.confirm({
       title: '确认发布',
+      okText: '确认',
+      cancelText: '取消',
       content: '发布后文章将对前台可见，确定发布吗？',
       onOk: async () => {
         try {
@@ -201,6 +219,8 @@ export default function ArticleEditPage() {
   const handleOffline = () => {
     Modal.confirm({
       title: '确认下线',
+      okText: '确认',
+      cancelText: '取消',
       content: '下线后文章将不再对前台可见，确定下线吗？',
       onOk: async () => {
         try {
@@ -216,6 +236,8 @@ export default function ArticleEditPage() {
     if (!articleCode) return;
     Modal.confirm({
       title: '确认删除',
+      okText: '确认',
+      cancelText: '取消',
       content: '删除后不可恢复，确定删除吗？',
       onOk: async () => {
         await deleteArticle(articleCode);

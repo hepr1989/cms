@@ -23,6 +23,8 @@ const TreeNodeTitle = React.memo(function TreeNodeTitle({ node, mode }: Props) {
     const typeName = node.type === 'folder' ? '栏目' : '文章';
     Modal.confirm({
       title: `确认删除${typeName}`,
+      okText: '确认',
+      cancelText: '取消',
       content: '删除后不可恢复',
       onOk: async () => {
         try {

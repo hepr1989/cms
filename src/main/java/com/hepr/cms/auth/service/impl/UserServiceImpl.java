@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.regex.Pattern;
@@ -74,8 +75,9 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public List<UserVO> list() {
+    public List<UserVO> list(String username) {
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(StringUtils.hasText(username), User::getUsername, username);
         wrapper.orderByDesc(User::getCreatedAt);
         return userMapper.selectList(wrapper).stream()
                 .map(this::toVO)

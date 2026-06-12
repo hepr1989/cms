@@ -1,7 +1,8 @@
 import client from './client';
 import type { UserVO, UserCreateDTO, UserUpdateDTO, UserPasswordDTO } from '@/types/auth';
 
-export const listUsers = () => client.get<UserVO[]>('/users');
+export const listUsers = (username?: string) =>
+  client.get<UserVO[]>('/users', { params: username ? { username } : {} });
 
 export const createUser = (data: UserCreateDTO) => client.post<UserVO>('/users', data);
 

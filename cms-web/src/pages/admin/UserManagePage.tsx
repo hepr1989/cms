@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Input, Select, Switch, message, Space, Popconfirm, Tooltip } from 'antd';
-import { PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, QuestionCircleOutlined, SearchOutlined } from '@ant-design/icons';
 import type { UserVO, UserCreateDTO, UserUpdateDTO } from '@/types/auth';
 import * as userApi from '@/api/user';
 import { formatDateTime } from '@/utils/constants';
@@ -40,17 +40,17 @@ export default function UserManagePage() {
   const [editingUser, setEditingUser] = useState<UserVO | null>(null);
   const [form] = Form.useForm();
 
-  const loadUsers = async () => {
-    if (usersLoading) {
-      // 正在加载，用缓存数据重放（StrictMode 二次挂载场景）
+  const loadUsers = async (searchUsername?: string) => {
+    // 模块级缓存仅用于初始加载防止 StrictMode 重复请求
+    if (!searchUsername && usersLoading) {
       if (usersCache) setUsers(usersCache);
       return;
     }
     usersLoading = true;
     setLoading(true);
     try {
-      const data = await userApi.listUsers() as unknown as UserVO[];
-      usersCache = data;
+      const data = await userApi.listUsers(searchUsername) as unknown as UserVO[];
+      if (!searchUsername) usersCache = data;
       setUsers(data);
     } catch (err: any) {
       message.error(err.message || '加载用户列表失败');
@@ -174,9 +174,18 @@ export default function UserManagePage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>用户管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>新增用户</Button>
+        <Space>
+          <Input.Search
+            placeholder="搜索用户名"
+            allowClear
+            enterButton={<SearchOutlined />}
+            onSearch={(val) => loadUsers(val || undefined)}
+            style={{ width: 200 }}
+          />
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>新增用户</Button>
+        </Space>
       </div>
       <Table columns={columns} dataSource={users} rowKey="username" loading={loading} />
 

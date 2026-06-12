@@ -22,9 +22,9 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping
-    public Result<List<UserVO>> list() {
+    public Result<List<UserVO>> list(@RequestParam(required = false) String username) {
         requireAdmin();
-        return Result.ok(userService.list());
+        return Result.ok(userService.list(username));
     }
 
     @PostMapping

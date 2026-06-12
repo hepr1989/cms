@@ -15,7 +15,7 @@ public interface UserService {
 
     UserVO getCurrentUser();
 
-    List<UserVO> list();
+    List<UserVO> list(String username);
 
     UserVO create(UserCreateDTO dto);
 

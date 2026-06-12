@@ -2,8 +2,11 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import AdminLayout from '@/components/layout/AdminLayout';
 import PortalLayout from '@/components/layout/PortalLayout';
 import AuthGuard from '@/components/auth/AuthGuard';
+import ErrorFallback from '@/components/common/ErrorFallback';
 import AdminPage from '@/pages/admin/AdminPage';
 import PortalPage from '@/pages/portal/PortalPage';
+
+const errorElement = <ErrorFallback />;
 
 export const router = createBrowserRouter([
   {
@@ -17,6 +20,7 @@ export const router = createBrowserRouter([
   {
     path: '/portal',
     element: <PortalLayout />,
+    errorElement,
     children: [
       { index: true, element: <PortalPage /> },
       { path: 'folder/:folderCode', lazy: () => import('@/pages/portal/FolderBrowsePage').then(m => ({ Component: m.default })) },
@@ -26,6 +30,7 @@ export const router = createBrowserRouter([
   {
     path: '/admin',
     element: <AuthGuard><AdminLayout /></AuthGuard>,
+    errorElement,
     children: [
       { index: true, element: <AdminPage /> },
       { path: 'folder/:folderCode', lazy: () => import('@/pages/admin/FolderViewPage').then(m => ({ Component: m.default })) },

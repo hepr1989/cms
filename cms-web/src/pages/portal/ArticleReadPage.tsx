@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
-import { Button } from 'antd';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Button, Result as AntResult } from 'antd';
 import { UnorderedListOutlined } from '@ant-design/icons';
 import { useArticleStore } from '@/store/article-store';
 import { useTreeStore } from '@/store/tree-store';
@@ -16,13 +16,19 @@ export default function ArticleReadPage() {
   const reset = useArticleStore(s => s.reset);
   const syncSelection = useTreeStore(s => s.syncSelection);
   const [showOutline, setShowOutline] = useState(true);
+  const [articleError, setArticleError] = useState<string | null>(null);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (articleCode) {
+      setArticleError(null);
       // 先加载文章获取 folderCode，再展开树路径
       loadArticle(articleCode).then(() => {
         const fc = useArticleStore.getState().currentArticle?.folderCode;
         syncSelection(`article-${articleCode}`, fc);
+      }).catch((err) => {
+        setArticleError(err?.message || '文章不存在或已被删除');
       });
     }
     return () => reset();
@@ -35,6 +41,16 @@ export default function ArticleReadPage() {
 
   const hasOutline = headings.length > 0;
 
+  if (articleError) {
+    return (
+      <AntResult
+        status="404"
+        title="文章不存在"
+        subTitle={articleError}
+        extra={<Button type="primary" onClick={() => navigate(-1)}>返回</Button>}
+      />
+    );
+  }
   if (!article) return <PageLoading />;
 
   return (

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Input, Dropdown, message, Modal, Select, Typography } from 'antd';
+import { Button, Input, Dropdown, message, Modal, Select, Typography, Result as AntResult } from 'antd';
 import { ArrowLeftOutlined, SaveOutlined, SendOutlined, DownOutlined, HistoryOutlined } from '@ant-design/icons';
 import { useArticleStore } from '@/store/article-store';
 import { useTreeStore } from '@/store/tree-store';
@@ -64,6 +64,7 @@ export default function ArticleEditPage() {
 
   // Permission state
   const [canEdit, setCanEdit] = useState(true);
+  const [articleError, setArticleError] = useState<string | null>(null);
 
   const isTopLevel = useMemo(() => {
     if (!articleCode || articleCode === 'new') {
@@ -126,10 +127,13 @@ export default function ArticleEditPage() {
       initNewArticle(folderCode);
       if (folderCode) syncSelection(`folder-${folderCode}`);
     } else if (articleCode) {
+      setArticleError(null);
       // 先加载文章获取 folderCode，再展开树路径
       loadArticle(articleCode).then(() => {
         const fc = useArticleStore.getState().currentArticle?.folderCode;
         syncSelection(`article-${articleCode}`, fc);
+      }).catch((err) => {
+        setArticleError(err?.message || '文章不存在或已被删除');
       });
       setSelectedVersion(null);
       setVersionContent(null);
@@ -249,6 +253,16 @@ export default function ArticleEditPage() {
     });
   };
 
+  if (articleError) {
+    return (
+      <AntResult
+        status="404"
+        title="文章不存在"
+        subTitle={articleError}
+        extra={<Button type="primary" onClick={() => navigate(-1)}>返回</Button>}
+      />
+    );
+  }
   if (!currentArticle) return <PageLoading />;
 
   const versionOptions = [

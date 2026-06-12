@@ -11,6 +11,7 @@ import { getMyPermissions } from '@/api/permission';
 import { importPdf } from '@/api/article';
 import ArticleStatusBadge from '@/components/article/ArticleStatusBadge';
 import { formatDateTime } from '@/utils/constants';
+import PageLoading from '@/components/common/PageLoading';
 import type { FolderVO, ArticleVO, FolderTreeVO, TreeDataNode } from '@/types';
 
 function findNode(nodes: TreeDataNode[], key: string): TreeDataNode | null {
@@ -123,7 +124,7 @@ export default function FolderViewPage() {
     }
   };
 
-  if (!data) return <div>加载中...</div>;
+  if (!data) return <PageLoading />;
 
   const hasContent = data.folders.length > 0 || data.articles.length > 0;
   const showAdmin = isAdmin();

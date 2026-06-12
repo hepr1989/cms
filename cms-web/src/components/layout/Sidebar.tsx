@@ -2,7 +2,7 @@ import { useTreeStore } from '@/store/tree-store';
 import { useUIStore } from '@/store/ui-store';
 import { useAuthStore } from '@/store/auth-store';
 import FolderTree from '@/components/tree/FolderTree';
-import { Button } from 'antd';
+import { Button, Spin } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
 
@@ -13,11 +13,12 @@ export default function Sidebar() {
   const collapsed = useUIStore(s => s.sidebarCollapsed);
   const openModal = useUIStore(s => s.openModal);
   const selectedKey = useTreeStore(s => s.selectedKey);
+  const rootLoading = useTreeStore(s => s.rootLoading);
 
   return (
     <div className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
-      <div className="sidebar-content">
-        <FolderTree mode={isOnAdminPage ? 'admin' : 'portal'} />
+      <div className="sidebar-content" style={rootLoading ? { display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
+        {rootLoading ? <Spin size="default" /> : <FolderTree mode={isOnAdminPage ? 'admin' : 'portal'} />}
       </div>
       {isOnAdminPage && isAdmin() && (
         <div className="sidebar-actions">

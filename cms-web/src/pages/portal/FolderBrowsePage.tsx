@@ -4,6 +4,7 @@ import { FolderOutlined, FileTextOutlined } from '@ant-design/icons';
 import { getChildren, getFolder } from '@/api/folder';
 import { useTreeStore } from '@/store/tree-store';
 import MetadataBar from '@/components/common/MetadataBar';
+import PageLoading from '@/components/common/PageLoading';
 import type { FolderVO, ArticleVO, FolderTreeVO } from '@/types';
 
 export default function FolderBrowsePage() {
@@ -21,7 +22,7 @@ export default function FolderBrowsePage() {
     }
   }, [folderCode, syncSelection]);
 
-  if (!data) return <div>加载中...</div>;
+  if (!data) return <PageLoading />;
 
   return (
     <div className="folder-browse-page">

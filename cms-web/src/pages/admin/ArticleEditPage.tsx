@@ -12,6 +12,7 @@ import { deleteArticle } from '@/api/article';
 import { getMyPermissions } from '@/api/permission';
 import * as versionApi from '@/api/version';
 import { ArticleStatus } from '@/types';
+import PageLoading from '@/components/common/PageLoading';
 import { formatDateTime } from '@/utils/constants';
 import type { ArticleVersionVO } from '@/types/version';
 import type { TreeDataNode } from '@/types';
@@ -248,7 +249,7 @@ export default function ArticleEditPage() {
     });
   };
 
-  if (!currentArticle) return <div>加载中...</div>;
+  if (!currentArticle) return <PageLoading />;
 
   const versionOptions = [
     { label: `V${currentArticle.versionNumber || 1}（当前）`, value: 'current' },

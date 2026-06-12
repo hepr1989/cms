@@ -6,6 +6,7 @@ import { useArticleStore } from '@/store/article-store';
 import { useTreeStore } from '@/store/tree-store';
 import MarkdownRenderer from '@/components/article/MarkdownRenderer';
 import MetadataBar from '@/components/common/MetadataBar';
+import PageLoading from '@/components/common/PageLoading';
 import { extractHeadings, OutlinePanel } from '@/components/article/OutlinePanel';
 
 export default function ArticleReadPage() {
@@ -34,7 +35,7 @@ export default function ArticleReadPage() {
 
   const hasOutline = headings.length > 0;
 
-  if (!article) return <div>加载中...</div>;
+  if (!article) return <PageLoading />;
 
   return (
     <div className="article-read-page">

@@ -112,6 +112,11 @@ const AttachmentLink = React.forwardRef<HTMLAnchorElement, AttachmentLinkProps>(
       );
     }
 
+    // 锚点链接（href="#xxx"）保持页内跳转，不加 target="_blank"
+    if (typeof href === 'string' && href.startsWith('#')) {
+      return <a href={href} {...rest}>{children}</a>;
+    }
+
     return <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>{children}</a>;
   }
 );

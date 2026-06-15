@@ -39,3 +39,56 @@
   width: 14px;
   height: 14px;
 }
+.markdown-body details {
+  margin-bottom: 0.5em;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  padding: 0;
+}
+.markdown-body details[open] summary {
+  border-bottom: 1px solid var(--color-border-strong);
+}
+.markdown-body details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  padding: 6px 12px;
+  user-select: none;
+  list-style: none;
+  font-size: 0.9em;
+}
+.markdown-body details summary::-webkit-details-marker { display: none; }
+.markdown-body details summary::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 0.75em;
+  transition: transform 0.15s;
+  color: var(--color-text-secondary);
+}
+.markdown-body details[open] summary::before {
+  transform: rotate(90deg);
+}
+.markdown-body details > :not(summary) {
+  padding: 0 12px;
+}
+.markdown-body details > p:last-child {
+  padding-bottom: 10px;
+}
+.markdown-body .detail-ref {
+  font-weight: 700;
+  color: var(--color-primary);
+  font-style: normal;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+.markdown-body .detail-ref:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+.markdown-body a[id^="d"] {
+  scroll-margin-top: 60px;
+  display: block;
+  height: 0;
+}
